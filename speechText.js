@@ -20,4 +20,44 @@ function stripTags(text) {
     .trim();
 }
 
-module.exports = { stripTags };
+// Phrases Whisper is known to invent for silence or noise (same list as
+// Project-Waifu's src/lib/conversationMode.ts). They are only treated as
+// phantoms on short clips, so a real "thank you" in a longer sentence survives.
+const PHANTOM_PHRASES = new Set([
+  "you",
+  "thank you",
+  "thanks",
+  "thank you very much",
+  "thanks for watching",
+  "thank you for watching",
+  "thank you for watching please subscribe",
+  "please subscribe",
+  "bye",
+  "bye bye",
+  "so",
+  "okay",
+  "uh",
+  "um",
+  "hmm",
+  "the end",
+]);
+
+/**
+ * Whisper's transcript tidied up, or "" if it is empty, only a bracketed noise
+ * tag ("[Music]", "(coughs)", "*sigh*", "♪"), or a likely phantom phrase on a
+ * clip under 1.5 s. Same rules as Project-Waifu's cleanTranscript.
+ * @param {string} raw
+ * @param {number} durationSec length of the recording
+ */
+function cleanTranscript(raw, durationSec) {
+  const text = String(raw || "")
+    .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*|♪+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalised = text.toLowerCase().replace(/[^a-z' ]/g, "").replace(/\s+/g, " ").trim();
+  if (!normalised) return "";
+  if (durationSec < 1.5 && PHANTOM_PHRASES.has(normalised)) return "";
+  return text;
+}
+
+module.exports = { stripTags, cleanTranscript };

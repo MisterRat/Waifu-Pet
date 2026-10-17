@@ -121,65 +121,159 @@ test("idle: stop prevents firing", () => {
 });
 
 // --- expressions: controller envelope math (mock model) ---
-const { ExpressionController } = R("expressions.js");
+const { ExpressionController, blendParam, blinkFactor, MouthMixer } = R("expressions.js");
+
+// Mock of the Live2D engine's frame: each frame starts from the saved (motion)
+// values, the face step writes on top, and nothing it wrote is kept.
+function mockFrameModel(saved) {
+  let values = { ...saved };
+  return {
+    saved,
+    get values() {
+      return values;
+    },
+    frame(fn) {
+      values = { ...saved };
+      fn();
+      return values;
+    },
+    model: {
+      internalModel: {
+        coreModel: {
+          getParameterValueById: (id) => values[id] ?? 0,
+          setParameterValueById: (id, v) => (values[id] = v),
+        },
+      },
+    },
+  };
+}
+
+function withClock(fn) {
+  const realNow = performance.now;
+  const clock = { t: 1000 };
+  performance.now = () => clock.t;
+  try {
+    fn(clock);
+  } finally {
+    performance.now = realNow;
+  }
+}
 
 test("expressions: envelope ramps up, holds, fades to baseline", () => {
-  const values = {};
-  const model = {
-    internalModel: {
-      coreModel: {
-        getParameterValueById: (id) => values[id] ?? 0,
-        setParameterValueById: (id, v) => (values[id] = v),
-      },
-    },
-  };
-  // fake clock
-  let t = 1000;
-  const realNow = performance.now;
-  performance.now = () => t;
-  try {
-    const c = new ExpressionController(model, { fadeInMs: 100, holdMs: 100, fadeOutMs: 100 });
+  withClock((clock) => {
+    const m = mockFrameModel({ Param3: 0 });
+    const c = new ExpressionController(m.model, { fadeInMs: 100, holdMs: 100, fadeOutMs: 100 });
     c.apply({ name: "Happy", params: [{ id: "Param3", value: 1, blend: "Set" }] });
-    t = 1050;
-    c.update();
-    assert.ok(values.Param3 > 0 && values.Param3 < 1, "fading in: " + values.Param3);
-    t = 1150;
-    c.update();
-    assert.strictEqual(values.Param3, 1, "holding at 1");
-    t = 1250;
-    c.update();
-    assert.ok(values.Param3 > 0 && values.Param3 < 1, "fading out: " + values.Param3);
-    t = 1300;
-    c.update();
-    assert.strictEqual(values.Param3, 0, "back to baseline");
+    clock.t = 1050;
+    let v = m.frame(() => c.update()).Param3;
+    assert.ok(v > 0 && v < 1, "fading in: " + v);
+    clock.t = 1150;
+    assert.strictEqual(m.frame(() => c.update()).Param3, 1, "holding at 1");
+    clock.t = 1250;
+    v = m.frame(() => c.update()).Param3;
+    assert.ok(v > 0 && v < 1, "fading out: " + v);
+    clock.t = 1300;
+    assert.strictEqual(m.frame(() => c.update()).Param3, 0, "back to baseline");
     assert.strictEqual(c.active, null);
-  } finally {
-    performance.now = realNow;
-  }
+    assert.strictEqual(c.activeName, "neutral");
+  });
 });
 
-test("expressions: Add blend adds to baseline", () => {
-  const values = { Param3: 0.5 };
-  const model = {
-    internalModel: {
-      coreModel: {
-        getParameterValueById: (id) => values[id] ?? 0,
-        setParameterValueById: (id, v) => (values[id] = v),
-      },
-    },
-  };
+test("expressions: Add and Multiply apply on top of this frame's value", () => {
+  withClock((clock) => {
+    const m = mockFrameModel({ A: 0.5, M: 0.8 });
+    const c = new ExpressionController(m.model, { fadeInMs: 10, holdMs: 10, fadeOutMs: 10 });
+    c.apply({ name: "X", params: [{ id: "A", value: 1, blend: "Add" }, { id: "M", value: 0.5, blend: "Multiply" }] });
+    clock.t = 1020;
+    const v = m.frame(() => c.update());
+    assert.strictEqual(v.A, 1.5, "Add: 0.5 + 1.0");
+    assert.strictEqual(v.M, 0.4, "Multiply: 0.8 x 0.5");
+  });
+  assert.ok(Math.abs(blendParam(0.2, 1, "Set", 0.5) - 0.6) < 1e-9);
+  assert.strictEqual(blendParam(2, 0.5, "Multiply", 0), 2, "weight 0 leaves the value alone");
+});
+
+test("expressions: a new face mid-fade leaves no leftovers behind", () => {
+  // The review's bug: a face that started while another was fading recorded the
+  // leftovers as neutral, so values it didn't set stayed stuck.
+  withClock((clock) => {
+    const m = mockFrameModel({ Brow: 0, Cheek: 0 });
+    const c = new ExpressionController(m.model, { fadeInMs: 100, holdMs: 100, fadeOutMs: 100 });
+    c.apply({ name: "Angry", params: [{ id: "Brow", value: 1, blend: "Set" }] });
+    clock.t = 1250; // Angry is half faded out
+    m.frame(() => c.update());
+    c.apply({ name: "Blush", params: [{ id: "Cheek", value: 1, blend: "Set" }] });
+    clock.t = 1400; // Blush fully in, Angry long gone
+    let v = m.frame(() => c.update());
+    assert.strictEqual(v.Brow, 0, "Brow is back to its default, not stuck");
+    assert.strictEqual(v.Cheek, 1);
+    clock.t = 1600; // Blush faded out too
+    v = m.frame(() => c.update());
+    assert.deepStrictEqual(v, { Brow: 0, Cheek: 0 }, "she ends exactly at her defaults");
+    assert.strictEqual(c.layers.length, 0);
+  });
+});
+
+test("expressions: the previous face cross-fades out instead of snapping", () => {
+  withClock((clock) => {
+    const m = mockFrameModel({ Brow: 0 });
+    const c = new ExpressionController(m.model, { fadeInMs: 100, holdMs: 1000, fadeOutMs: 100 });
+    c.apply({ name: "Angry", params: [{ id: "Brow", value: 1, blend: "Set" }] });
+    clock.t = 1200;
+    c.apply({ name: "Calm", params: [{ id: "Mouth", value: 1, blend: "Set" }] });
+    clock.t = 1250;
+    const v = m.frame(() => c.update()).Brow;
+    assert.ok(v > 0 && v < 1, "Angry's brow is fading out: " + v);
+    assert.strictEqual(c.activeName, "Calm");
+    clock.t = 1300;
+    assert.strictEqual(m.frame(() => c.update()).Brow, 0);
+  });
+});
+
+test("expressions: clear fades the face back out", () => {
+  withClock((clock) => {
+    const m = mockFrameModel({ P: 0 });
+    const c = new ExpressionController(m.model, { fadeInMs: 100, holdMs: 1000, fadeOutMs: 100 });
+    c.apply({ name: "Happy", params: [{ id: "P", value: 1, blend: "Set" }] });
+    clock.t = 1200;
+    c.clear();
+    assert.strictEqual(c.activeName, "neutral");
+    clock.t = 1250;
+    const v = m.frame(() => c.update()).P;
+    assert.ok(v > 0 && v < 1, "fading: " + v);
+    clock.t = 1301;
+    assert.strictEqual(m.frame(() => c.update()).P, 0);
+  });
+});
+
+test("blink: scales eye-open, so a narrowed face stays narrowed", () => {
+  assert.strictEqual(blinkFactor(-5), 1);
+  assert.strictEqual(blinkFactor(0), 1);
+  assert.strictEqual(blinkFactor(120), 0, "shut at 120 ms");
+  assert.strictEqual(blinkFactor(300), 1, "open again at 300 ms");
+  assert.strictEqual(blinkFactor(1e9), 1);
+  assert.ok(Math.abs(0.4 * blinkFactor(60) - 0.2) < 1e-9, "a face's 0.4 eye goes to 0.2, never above 0.4");
+});
+
+test("lip sync: leaves the face's mouth alone while she is silent", () => {
+  const mm = new MouthMixer({ holdMs: 250 });
+  const silent = { mouthOpenY: 0, mouthForm: 0, isSpeaking: false };
+  assert.strictEqual(mm.step(silent, 0, 1 / 60), 0);
+  assert.strictEqual(mm.openY(0.6, 0), 0.6, "a face's open mouth is kept");
+  assert.strictEqual(mm.form(-0.8, 0), -0.8, "a face's mouth form is kept");
+  // Speaking: the voice takes the mouth over a few frames.
   let t = 0;
-  const realNow = performance.now;
-  performance.now = () => t;
-  try {
-    const c = new ExpressionController(model, { fadeInMs: 10, holdMs: 10, fadeOutMs: 10 });
-    c.apply({ name: "X", params: [{ id: "Param3", value: 1, blend: "Add" }] });
-    t = 20; // end of hold (fadeIn 10 + hold 10)
-    c.update();
-    assert.strictEqual(values.Param3, 1.5, "Add blend: 0.5 + 1.0");
-  } finally {
-    performance.now = realNow;
-  }
+  for (let i = 0; i < 30; i++) mm.step({ mouthOpenY: 0.9, mouthForm: 0.5, isSpeaking: true }, (t += 16), 1 / 60);
+  assert.ok(mm.weight > 0.99);
+  assert.ok(Math.abs(mm.openY(0.2, 0.9) - 0.9) < 0.01, "voice opens the mouth");
+  assert.ok(Math.abs(mm.openY(0.7, 0.1) - 0.7) < 0.01, "but never closes a face's open mouth");
+  // A short gap between sentences keeps the voice in charge...
+  mm.step(silent, t + 100, 1 / 60);
+  assert.ok(mm.weight > 0.9, "held across a gap: " + mm.weight);
+  // ...and once she stops for good, the face's mouth comes back.
+  for (let i = 0; i < 60; i++) mm.step(silent, t + 300 + i * 16, 1 / 60);
+  assert.strictEqual(mm.weight, 0);
+  assert.strictEqual(mm.openY(0.6, 0.9), 0.6);
 });
 
 // --- settings: per-model overrides ---
@@ -512,6 +606,57 @@ test("stt: a crashed worker is reported, and a worker error stops loading", () =
   w.emit("message", { type: "error", message: "download failed" });
   assert.strictEqual(svc.status.state, "error");
   assert.match(svc.status.message, /download failed/);
+});
+
+// --- speech-to-text: Whisper phantom filter (ported from Project-Waifu) ---
+const { cleanTranscript } = require("../speechText");
+
+test("cleanTranscript: drops noise tags and short-clip phantoms, keeps real speech", () => {
+  assert.strictEqual(cleanTranscript(" Thank you. ", 0.8), "", "phantom on a short clip");
+  assert.strictEqual(cleanTranscript("you", 1.0), "");
+  assert.strictEqual(cleanTranscript("[Music]", 4), "", "noise tag only");
+  assert.strictEqual(cleanTranscript("(coughs) ♪♪", 4), "");
+  assert.strictEqual(cleanTranscript("Thank you.", 2.5), "Thank you.", "a long clip is trusted");
+  assert.strictEqual(
+    cleanTranscript("Thank you for the help [Music]", 1.0),
+    "Thank you for the help",
+    "a real sentence survives, minus the tag"
+  );
+  assert.strictEqual(cleanTranscript("", 3), "");
+  assert.strictEqual(cleanTranscript(null, 3), "");
+});
+
+// --- fullscreen watcher: restarts PowerShell if it exits ---
+const { FullscreenWatcher } = require("../fullscreen");
+const { EventEmitter: EE } = require("events");
+
+test("fullscreen: watcher restarts after PowerShell exits, and stop() ends it", async () => {
+  const kids = [];
+  const fakeSpawn = () => {
+    const c = new EE();
+    c.stdout = new EE();
+    c.kill = () => c.emit("exit", 1);
+    kids.push(c);
+    return c;
+  };
+  const w = new FullscreenWatcher({ spawn: fakeSpawn, platform: "win32" });
+  w.restartMs = 5; // speed the back-off up for the test
+  const changes = [];
+  w.on("change", (v) => changes.push(v));
+  w.start();
+  assert.strictEqual(kids.length, 1);
+  kids[0].stdout.emit("data", "3\n");
+  assert.strictEqual(w.fullscreen, true);
+  kids[0].emit("exit", 1); // PowerShell dies
+  assert.strictEqual(w.fullscreen, false, "no longer claims fullscreen once the watcher is gone");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(kids.length, 2, "a new watcher was started");
+  w.stop();
+  await new Promise((r) => setTimeout(r, 60));
+  assert.strictEqual(kids.length, 2, "stop() is final: no restart after a deliberate kill");
+  assert.deepStrictEqual(changes, [true, false]);
+  assert.strictEqual(new FullscreenWatcher({ spawn: fakeSpawn, platform: "linux" }).start(), undefined);
+  assert.strictEqual(kids.length, 2, "never runs off Windows");
 });
 
 Promise.all(pending).then(() => console.log(`\n${passed} tests passed`));

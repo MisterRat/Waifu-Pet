@@ -51,6 +51,24 @@ function updateRangeLabels() {
 }
 for (const id of Object.keys(RANGE_FORMAT)) $(id).addEventListener("input", updateRangeLabels);
 
+// Framing sliders the user has moved since the model's values were loaded. Only
+// these are saved, so a mouse-wheel zoom or right-drag done in the pet while
+// this window is open is never overwritten by the slider's stale value.
+const FRAME_FIELDS = { frameZoom: "zoom", frameX: "x", frameY: "y" };
+const framingTouched = new Set();
+for (const id of Object.keys(FRAME_FIELDS)) $(id).addEventListener("input", () => framingTouched.add(id));
+
+// Fresh copy of the saved per-model settings (re-read after each save and on
+// every model switch, so the form never shows values that have since changed).
+async function reloadModelOverrides() {
+  try {
+    const fresh = await window.pet.settingsGet();
+    fillModelOverrides(fresh.models || {});
+  } catch (e) {
+    setStatus($("saveStatus"), false, "Reload failed: " + e.message);
+  }
+}
+
 window.pet
   .settingsGet()
   .then(async (s) => {
@@ -67,7 +85,7 @@ window.pet
     sel.value = models.some((m) => m.name === s.pet.model) ? s.pet.model : (models[0] && models[0].name);
     fillModelOverrides(s.models || {});
     sel.addEventListener("change", () => {
-      fillModelOverrides(s.models || {});
+      reloadModelOverrides();
       runModelCheck();
     });
     $("chatBaseUrl").value = s.chat.baseUrl;
@@ -111,6 +129,7 @@ function fillModelOverrides(models) {
   $("frameZoom").value = Number.isFinite(f.zoom) ? f.zoom : 1;
   $("frameX").value = Number.isFinite(f.x) ? f.x : 0;
   $("frameY").value = Number.isFinite(f.y) ? f.y : 0;
+  framingTouched.clear();
   updateRangeLabels();
 }
 
@@ -141,6 +160,7 @@ $("resetFrame").addEventListener("click", () => {
   $("frameZoom").value = 1;
   $("frameX").value = 0;
   $("frameY").value = 0;
+  for (const id of Object.keys(FRAME_FIELDS)) framingTouched.add(id);
   updateRangeLabels();
 });
 
@@ -149,12 +169,11 @@ function collect() {
   const modelOverride = {
     systemPrompt: $("modelSystemPrompt").value.trim(),
     voice: $("modelVoice").value.trim(),
-    framing: {
-      zoom: parseFloat($("frameZoom").value),
-      x: parseFloat($("frameX").value),
-      y: parseFloat($("frameY").value),
-    },
   };
+  // Only the framing values moved here; the rest stay as the pet saved them.
+  const framing = {};
+  for (const id of framingTouched) framing[FRAME_FIELDS[id]] = parseFloat($(id).value);
+  if (Object.keys(framing).length) modelOverride.framing = framing;
   return {
     chat: {
       baseUrl: $("chatBaseUrl").value.trim(),
@@ -209,6 +228,7 @@ $("save").addEventListener("click", async () => {
     await window.pet.settingsUpdate(data);
     // Apply the Size setting immediately (resizes the pet window in place).
     window.pet.setScale(data.pet.scale);
+    await reloadModelOverrides();
     setStatus($("saveStatus"), true, "Saved.");
   } catch (e) {
     setStatus($("saveStatus"), false, "Save failed: " + e.message);
@@ -218,6 +238,7 @@ $("save").addEventListener("click", async () => {
 $("testChat").addEventListener("click", async () => {
   // Save first so the test uses the current values.
   await window.pet.settingsUpdate(collect());
+  await reloadModelOverrides();
   setStatus($("chatStatus"), true, "Testing…");
   try {
     const r = await window.pet.chatTest();
@@ -230,6 +251,7 @@ $("testChat").addEventListener("click", async () => {
 
 $("testTts").addEventListener("click", async () => {
   await window.pet.settingsUpdate(collect());
+  await reloadModelOverrides();
   setStatus($("ttsStatus"), true, "Testing…");
   try {
     const r = await window.pet.ttsTest();

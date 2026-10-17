@@ -42,7 +42,7 @@ Windows SmartScreen may warn the first time ("More info" → "Run anyway").
 |---|---|
 | Left-click | She reacts |
 | Left-drag | Move her anywhere on any monitor |
-| Mouse wheel | Zoom the model inside the window |
+| Mouse wheel | Zoom the model inside the window (0.4× to 20×) |
 | Right-drag | Move the model up/down inside the window |
 | Tray → Chat | Open the chat window |
 
@@ -80,7 +80,11 @@ Settings and in the tray immediately, no restart needed. Optional files she make
 
 - `*.exp3.json` expressions. Their file names become the emotion tags the LLM may
   use (`Happy.exp3.json` → `[happy]`). The chat window tells the LLM exactly which
-  tags the current model has.
+  tags the current model has. Faces are layered on top of her motion and fade
+  back cleanly; their mouth shape shows whenever she isn't speaking, and blinks
+  close the eyes from wherever the face has them.
+- `waifu-faces.json` (optional) tunes faces without editing the `.exp3.json`
+  files: `{"skip": ["Crying"], "map": {"crying": "Sad"}}`.
 - `*.motion3.json` motions (in the folder or a `Motions/` subfolder). Files named
   `Idle_*` loop while she is idle; every other motion is a reaction and a motion
   tag (`Wave.motion3.json` → `[wave]`). Motions declared in `model3.json` are
@@ -121,7 +125,7 @@ main.js            Electron main process: windows, tray, cursor tracking, fullsc
 ipc.js             Chat / streaming / TTS proxies, speech-to-text IPC, prompts, settings access
 stt.js             Built-in Whisper lifecycle (download, load, unload)
 stt-worker.js      Whisper worker process (Transformers.js)
-speechText.js      Strips [tags] so they are never spoken
+speechText.js      Strips [tags] so they are never spoken; filters words Whisper invents from noise
 settings.js        Settings store (atomic writes, encrypted API keys)
 models.js          Model discovery and the model health check
 server.js          Local static file server (whitelisted folders, loopback only)
@@ -133,7 +137,7 @@ renderer/          Pet window: pet.js, idle.js, expressions.js, tagParser.js, li
 chat/              Chat and Settings windows
 assets/            Tray icon and app icon (npm run icon generates icon.png)
 vendor/            Live2D Cubism Core, Pixi and the Live2D plugin (copied from node_modules by npm install)
-models/            Bundled / dev models (one folder each)
+models/            Bundled / dev models (one folder each; only Tamamo is in git, see .gitignore)
 build.bat          Builds dist\WaifuPet.exe
 start.bat          Installs dependencies if needed and runs the app
 tests/             npm test
@@ -141,9 +145,10 @@ tests/             npm test
 
 ## Tests
 
-`npm test` runs unit tests for the parsers, idle and proactive scheduling,
-settings, model inspection, and an integration test of the streaming chat path
-against a local fake server.
+`npm test` runs unit tests for the parsers, faces (blending, cross-fades, blink
+and lip-sync mixing), idle and proactive scheduling, settings, model inspection,
+the fullscreen watcher's restart, and an integration test of the streaming chat
+path against a local fake server.
 
 ## Security notes
 
