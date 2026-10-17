@@ -95,11 +95,6 @@ function petSize(scale) {
 }
 
 /**
- * Keep a window of size w×h on the desktop without confining it to one
- * monitor: the window's CENTER must stay inside some display's work area (so
- * she can be dragged across monitors, half off an edge, but never lost).
- */
-/**
  * Where models are looked up, highest priority first:
  *  1. models\ next to the portable .exe (drop-in folder for the single-file build)
  *  2. models\ inside the user-data folder (%APPDATA%\waifu-pet\models)
@@ -151,6 +146,11 @@ function startCursorTracking() {
   }, 33);
 }
 
+/**
+ * Keep a window of size w×h on the desktop without confining it to one
+ * monitor: the window's CENTER must stay inside some display's work area (so
+ * she can be dragged across monitors, half off an edge, but never lost).
+ */
 function clampToDesktop(x, y, w, h) {
   const cx = Math.round(x + w / 2);
   const cy = Math.round(y + h / 2);
@@ -533,9 +533,6 @@ function applyScale(s) {
   petWin.webContents.send("pet:scale", scale);
 }
 
-// Switch the pet model: persist the choice and reload the pet window with
-// the new ?model= query param (the renderer discovers everything else from
-// the model folder).
 // Built-in Whisper. Runs in its own process so turning it off frees the memory.
 const stt = new SttService({
   fork: () => utilityProcess.fork(path.join(__dirname, "stt-worker.js"), [], { serviceName: "Waifu Pet Whisper" }),
@@ -567,6 +564,9 @@ function onSettingsChanged() {
   if (petWin && !petWin.isDestroyed()) petWin.webContents.send("pet:settings-changed");
 }
 
+// Switch the pet model: persist the choice and reload the pet window with
+// the new ?model= query param (the renderer discovers everything else from
+// the model folder).
 function applyModel(name) {
   if (!listModels().some((m) => m.name === name)) return;
   settings.update({ pet: { model: name } });
@@ -581,8 +581,11 @@ function applyModel(name) {
 }
 
 function registerWindowIpc() {
-  // Window-control messages are only honoured from the pet window itself.
-  const fromPet = (e) => petWin && !petWin.isDestroyed() && e.sender === petWin.webContents;
+  // Window-control messages are only honoured from the window they belong to.
+  const fromWin = (win, e) => Boolean(win && !win.isDestroyed() && e.sender === win.webContents);
+  const fromPet = (e) => fromWin(petWin, e);
+  const fromChat = (e) => fromWin(chatWin, e);
+  const fromSettingsWin = (e) => fromWin(settingsWin, e);
   const finite = (...n) => n.every((v) => Number.isFinite(v));
 
   ipcMain.on("window:move-by", (e, dx, dy) => {
@@ -602,7 +605,8 @@ function registerWindowIpc() {
     if (!fromPet(e) || !loadedModel || !f) return;
     if (!finite(f.zoom, f.x, f.y)) return;
     const framing = {
-      zoom: Math.min(5, Math.max(0.2, f.zoom)),
+      // Same zoom range as the pet window (renderer/pet.js ZOOM_MIN/ZOOM_MAX).
+      zoom: Math.min(20, Math.max(0.4, f.zoom)),
       x: Math.min(1, Math.max(-1, f.x)),
       y: Math.min(1, Math.max(-1, f.y)),
     };
@@ -616,19 +620,32 @@ function registerWindowIpc() {
     petWin.setIgnoreMouseEvents(!!ignore, { forward: true });
   });
 
-  ipcMain.on("window:set-scale", (_e, s) => applyScale(s));
+  // Size is set from the Settings window (Save applies it straight away).
+  ipcMain.on("window:set-scale", (e, s) => {
+    if (fromSettingsWin(e) || fromPet(e)) applyScale(s);
+  });
 
-  ipcMain.on("window:quit", () => app.quit());
+  ipcMain.on("window:quit", (e) => {
+    if (fromPet(e)) app.quit();
+  });
 
-  ipcMain.on("window:open-chat", () => createChatWindow());
-  ipcMain.on("window:open-settings", () => createSettingsWindow());
+  ipcMain.on("window:open-chat", (e) => {
+    if (fromPet(e)) createChatWindow();
+  });
+  ipcMain.on("window:open-settings", (e) => {
+    if (fromPet(e) || fromChat(e)) createSettingsWindow();
+  });
 
-  ipcMain.on("chat:close", () => chatWin && chatWin.close());
-  ipcMain.on("settings:close", () => settingsWin && settingsWin.close());
+  ipcMain.on("chat:close", (e) => {
+    if (fromChat(e)) chatWin.close();
+  });
+  ipcMain.on("settings:close", (e) => {
+    if (fromSettingsWin(e)) settingsWin.close();
+  });
 
   // Chat window asks main to push a line to the pet's speech bubble.
-  ipcMain.on("chat:push-line", (_e, payload) => {
-    if (petWin) petWin.webContents.send("chat:line", payload);
+  ipcMain.on("chat:push-line", (e, payload) => {
+    if (fromChat(e) && petWin && !petWin.isDestroyed()) petWin.webContents.send("chat:line", payload);
   });
 }
 
@@ -668,7 +685,12 @@ if (!gotLock) {
     httpServer = await startStaticServer(__dirname, { modelRoots: getModelRoots });
     port = httpServer.port;
 
-    registerIpc(settings, { getLoadedModel: () => loadedModel, onSettingsChanged, stt });
+    registerIpc(settings, {
+      getLoadedModel: () => loadedModel,
+      getOrigin: () => (port ? `http://127.0.0.1:${port}` : ""),
+      onSettingsChanged,
+      stt,
+    });
     stt.apply(settings.get().stt); // loads Whisper at startup only if voice input is enabled
     registerWindowIpc();
     buildTray();
@@ -707,16 +729,22 @@ if (!gotLock) {
     console.error("[main] startup failed:", err);
   });
 
-  app.on("window-all-closed", (e) => {
-    // Keep running in tray on Windows/Linux; quit on macOS per convention.
-    if (process.platform !== "darwin") app.quit();
+  app.on("window-all-closed", () => {
+    // Closing the last window (the pet) ends the app; the tray icon goes with it.
+    app.quit();
   });
 
-  app.on("before-quit", async () => {
+  // Electron doesn't wait for an async before-quit handler, so shut things down
+  // synchronously; the local server's sockets close with the process.
+  app.on("before-quit", () => {
     if (cursorTimer) clearInterval(cursorTimer);
     if (proactive) proactive.stop();
     if (fullscreenWatcher) fullscreenWatcher.stop();
     stt.unload(true);
-    if (httpServer) await httpServer.close();
+    if (httpServer) {
+      try {
+        httpServer.close();
+      } catch {}
+    }
   });
 }

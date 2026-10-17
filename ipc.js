@@ -4,7 +4,7 @@
 // process proxies requests so API keys stay out of the renderer and CORS is a
 // non-issue.
 "use strict";
-const { stripTags } = require("./speechText");
+const { stripTags, cleanTranscript } = require("./speechText");
 
 const { ipcMain } = require("electron");
 const { extractContent, extractSseContent, createSseParser } = require("./extractContent");
@@ -61,11 +61,18 @@ function sanitizeMessages(messages) {
   });
 }
 
-/** Only the settings window may read/write API keys. */
-function isSettingsSender(e) {
+/**
+ * Only the settings window may read/write API keys. Checks the full origin
+ * (our own local server) as well as the page, when the origin is known.
+ * @param {object} e IPC event
+ * @param {string} [origin] e.g. "http://127.0.0.1:51234"
+ */
+function isSettingsSender(e, origin) {
   try {
     const url = (e.senderFrame && e.senderFrame.url) || e.sender.getURL();
-    return new URL(url).pathname === "/chat/settings.html";
+    const u = new URL(url);
+    if (origin && u.origin !== origin) return false;
+    return u.pathname === "/chat/settings.html";
   } catch {
     return false;
   }
@@ -235,14 +242,15 @@ function safeSend(wc, channel, payload) {
  * @param {{getLoadedModel?: () => (string|null), onSettingsChanged?: () => void}} [hooks]
  */
 function registerIpc(settings, hooks = {}) {
+  const fromSettings = (e) => isSettingsSender(e, hooks.getOrigin && hooks.getOrigin());
   const activeModel = () => (hooks.getLoadedModel && hooks.getLoadedModel()) || resolveModelName(settings.get());
 
   // API keys only go to the settings window; the pet and chat windows get a
   // redacted copy (they proxy through main and never need the keys).
-  ipcMain.handle("settings:get", (e) => (isSettingsSender(e) ? settings.get() : publicView(settings.get())));
+  ipcMain.handle("settings:get", (e) => (fromSettings(e) ? settings.get() : publicView(settings.get())));
 
   ipcMain.handle("settings:update", (e, partial) => {
-    if (!isSettingsSender(e)) throw new Error("settings can only be changed from the settings window");
+    if (!fromSettings(e)) throw new Error("settings can only be changed from the settings window");
     settings.update(partial);
     if (hooks.onSettingsChanged) hooks.onSettingsChanged();
     return settings.get();
@@ -341,7 +349,8 @@ function registerIpc(settings, hooks = {}) {
     const samples = a instanceof Float32Array ? a : ArrayBuffer.isView(a) ? new Float32Array(a.buffer, a.byteOffset, a.byteLength >> 2) : null;
     if (!samples || samples.length > MAX_AUDIO_SAMPLES) throw new Error("Recording is missing or too long (2 minutes max)");
     if (samples.length < MIN_AUDIO_SAMPLES) throw new Error("Recording was too short");
-    const text = (await hooks.stt.transcribe(samples, stt.language)).trim();
+    // Drop noise tags and the phrases Whisper invents from near-silence.
+    const text = cleanTranscript(await hooks.stt.transcribe(samples, stt.language), samples.length / 16000);
     if (!text) throw new Error("No speech was recognised");
     return { text };
   });

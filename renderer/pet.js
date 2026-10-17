@@ -91,6 +91,10 @@
   // are fractions of the window size so they survive window resizing. The Size
   // setting controls the WINDOW size. Framing is remembered per model.
   let zoom = 1;
+  // Zoom limits; main.js clamps saved framing to the same range (keep in sync).
+  const ZOOM_MIN = 0.4;
+  const ZOOM_MAX = 20;
+  const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
   let modelOffX = 0;
   let modelOffY = 0;
   // Discover the model3.json file in the model folder (no hardcoded name).
@@ -162,7 +166,7 @@
   function applySavedFraming() {
     const fr = cfg.models && cfg.models[modelFolder] && cfg.models[modelFolder].framing;
     const num = (v, d) => (Number.isFinite(v) ? v : d);
-    zoom = Math.max(0.2, num(fr && fr.zoom, 1));
+    zoom = clampZoom(num(fr && fr.zoom, 1));
     modelOffX = num(fr && fr.x, 0);
     modelOffY = num(fr && fr.y, 0);
   }
@@ -179,9 +183,9 @@
   window.addEventListener("wheel", (e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    // No upper zoom limit — zoom in as far as you want. Lower limit keeps
-    // the model from shrinking smaller than the window.
-    zoom = Math.max(0.4, zoom * factor);
+    // Zoom in as far as you like (20x is far past a face close-up); the lower
+    // limit keeps the model from shrinking smaller than the window.
+    zoom = clampZoom(zoom * factor);
     modelOffY = clampOffY(modelOffY);
     fitModel();
     scheduleSaveFraming();
@@ -338,18 +342,13 @@
     Array.isArray(ids) && ids.length && ids.every((i) => typeof i === "string") ? ids : fallback;
   const blinkIds = idsOr(mm.eyeBlinkIds, ["ParamEyeLOpen", "ParamEyeROpen"]);
   const mouthIds = idsOr(mm.lipSyncIds, null); // null = Cubism-standard ParamMouthOpenY/Form
-  let blinkT0 = 0;
+  let blinkT0 = -1e9;
   function startBlink() {
     blinkT0 = performance.now();
   }
-  function blinkUpdate(now) {
-    const t = now - blinkT0;
-    if (t < 0 || t > 300) return;
-    let v;
-    if (t < 120) v = 1 - t / 120;
-    else v = (t - 120) / 180;
-    for (const id of blinkIds) model.internalModel.coreModel.setParameterValueById(id, v);
-  }
+  // Our blink always runs (from the idle scheduler); the library's built-in one
+  // only runs when no motion plays and would set eye-open instead of scaling it.
+  model.internalModel.eyeBlink = undefined;
 
   // --- Procedural tail wag ---
   // Rigs with the 9-segment Param_Angle_Rotation_<n>_TAIL2 chain (Tamamo) get
@@ -540,31 +539,75 @@
   if (!noMotion && !noIdle) idle.start();
 
   // --- Per-frame ---
-  app.ticker.add((ticker) => {
+  // Lip sync is sampled here; what it does to the mouth is applied in the face
+  // step below.
+  let lipFrame = { mouthOpenY: 0, mouthForm: 0, isSpeaking: false };
+  app.ticker.add(() => {
     const now = performance.now();
     updateGaze(now);
     if (!noMotion && !noIdle) idle.tick();
-    if (!noMotion && !noExpr) exprCtrl.update(now);
-    if (!noMotion && !noBlink) blinkUpdate(now);
     if (!noMotion && !noLipsync) {
       // NOTE: the ticker callback arg is deltaTime (number, 1/60s units),
       // NOT the Ticker instance — reading .deltaMS off it yields undefined,
       // which made lipSync.update(NaN) write NaN into the moc3 param buffer
       // and corrupt the face mesh. Use app.ticker.deltaMS explicitly.
-      const ls = lipSync.update(app.ticker.deltaMS / 1000);
-      // DEFENSE: lipSync.update() must return finite numbers. A null/NaN here
-      // writes garbage into the moc3 parameter buffer and corrupts the face
-      // mesh (the "neck skin at face position" bug).
-      const openY = Number.isFinite(ls.mouthOpenY) ? ls.mouthOpenY : 0;
-      const form = Number.isFinite(ls.mouthForm) ? ls.mouthForm : 0;
-      if (mouthIds) {
-        for (const id of mouthIds) model.internalModel.coreModel.setParameterValueById(id, openY);
-      } else {
-        model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", openY);
-      }
-      model.internalModel.coreModel.setParameterValueById("ParamMouthForm", form);
+      lipFrame = lipSync.update(app.ticker.deltaMS / 1000);
     }
   });
+
+  // --- Face step: faces, gaze, the voice's mouth, blinks ---
+  // Runs inside Live2D's focus step, which comes after the frame's motion has
+  // been applied and saved and before physics (same hook as Project-Waifu). So
+  // faces layer on top of idle loops and gestures, physics reacts to the result,
+  // and nothing written here is carried into the next frame. Order matters:
+  // face first, then gaze adds on top, then the voice takes the mouth only while
+  // she speaks, then the blink scales whatever eye openness that left.
+  const mouthMixer = new WaifuExpressions.MouthMixer();
+  const mouthOpenIds = mouthIds || ["ParamMouthOpenY"];
+  let faceStepLast = performance.now();
+  let faceStepOk = true;
+  {
+    const im = model.internalModel;
+    const originalUpdateFocus = im.updateFocus.bind(im);
+    im.updateFocus = () => {
+      if (!faceStepOk || noMotion) {
+        originalUpdateFocus();
+        return;
+      }
+      try {
+        const now = performance.now();
+        const dt = Math.min(0.1, Math.max(0, (now - faceStepLast) / 1000));
+        faceStepLast = now;
+        const cm = im.coreModel;
+        if (!noExpr) exprCtrl.update(now);
+        originalUpdateFocus();
+        if (!noLipsync) {
+          // DEFENSE: never write a non-finite value; NaN corrupts the face mesh
+          // (the "neck skin at face position" bug).
+          const w = mouthMixer.step(lipFrame, now, dt);
+          if (w > 0) {
+            for (const id of mouthOpenIds) {
+              const v = mouthMixer.openY(cm.getParameterValueById(id), lipFrame.mouthOpenY);
+              if (Number.isFinite(v)) cm.setParameterValueById(id, v);
+            }
+            const f = mouthMixer.form(cm.getParameterValueById("ParamMouthForm"), lipFrame.mouthForm);
+            if (Number.isFinite(f)) cm.setParameterValueById("ParamMouthForm", f);
+          }
+        }
+        if (!noBlink) {
+          const b = WaifuExpressions.blinkFactor(now - blinkT0);
+          if (b < 1) for (const id of blinkIds) cm.setParameterValueById(id, cm.getParameterValueById(id) * b);
+        }
+      } catch (e) {
+        // A cosmetic layer must never stop the model from drawing.
+        faceStepOk = false;
+        console.warn("[pet] face step disabled:", e.message);
+        try {
+          originalUpdateFocus();
+        } catch {}
+      }
+    };
+  }
 
   // --- Performance + live settings ---
   // Frame-rate cap (0 = unlimited) and "stop drawing while hidden". Applied at

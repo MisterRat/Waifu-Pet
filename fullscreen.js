@@ -26,29 +26,63 @@ while ($true) {
 }
 `;
 
+// If PowerShell exits (killed, crashed, logged off), start it again after a
+// back-off: 2 s, doubling up to 60 s. A run that lasted a minute resets it.
+const RESTART_MIN_MS = 2000;
+const RESTART_MAX_MS = 60000;
+const HEALTHY_RUN_MS = 60000;
+
 class FullscreenWatcher extends EventEmitter {
-  constructor() {
+  /**
+   * @param {object} [opts]
+   * @param {Function} [opts.spawn] child_process.spawn (injectable for tests)
+   * @param {string} [opts.platform] defaults to process.platform
+   */
+  constructor(opts = {}) {
     super();
     this.fullscreen = false;
     this.child = null;
+    this.spawn = opts.spawn || spawn;
+    this.platform = opts.platform || process.platform;
+    this.wanted = false; // true between start() and stop()
+    this.restartMs = RESTART_MIN_MS;
+    this.restartTimer = null;
+    this.restarts = 0;
   }
 
   start() {
-    if (this.child || process.platform !== "win32") return;
+    if (this.platform !== "win32") return;
+    this.wanted = true;
+    if (this.child || this.restartTimer) return;
+    this._launch();
+  }
+
+  _launch() {
+    let child;
     try {
       const encoded = Buffer.from(SCRIPT, "utf16le").toString("base64");
-      this.child = spawn(
+      child = this.spawn(
         "powershell.exe",
         ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
         { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }
       );
     } catch (e) {
       console.warn("[fullscreen] could not start watcher:", e.message);
-      this.child = null;
+      this._scheduleRestart(0);
       return;
     }
+    this.child = child;
+    const startedAt = Date.now();
+    let gone = false;
+    const onGone = () => {
+      if (gone) return; // "error" and "exit" can both fire
+      gone = true;
+      if (this.child === child) this.child = null;
+      this._set(false);
+      this._scheduleRestart(Date.now() - startedAt);
+    };
     let buf = "";
-    this.child.stdout.on("data", (d) => {
+    child.stdout.on("data", (d) => {
       buf += d.toString();
       let i;
       while ((i = buf.indexOf("\n")) >= 0) {
@@ -57,19 +91,35 @@ class FullscreenWatcher extends EventEmitter {
         if (Number.isFinite(n)) this._set(FULLSCREEN_STATES.has(n));
       }
     });
-    this.child.on("error", () => (this.child = null));
-    this.child.on("exit", () => {
-      this.child = null;
-      this._set(false);
-    });
+    child.on("error", onGone);
+    child.on("exit", onGone);
+  }
+
+  _scheduleRestart(ranMs) {
+    if (!this.wanted || this.restartTimer) return;
+    if (ranMs >= HEALTHY_RUN_MS) this.restartMs = RESTART_MIN_MS;
+    const delay = this.restartMs;
+    this.restartMs = Math.min(RESTART_MAX_MS, this.restartMs * 2);
+    console.warn(`[fullscreen] watcher stopped; restarting in ${Math.round(delay / 1000)} s`);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (!this.wanted) return;
+      this.restarts++;
+      this._launch();
+    }, delay);
+    if (this.restartTimer.unref) this.restartTimer.unref();
   }
 
   stop() {
-    if (this.child) {
+    this.wanted = false;
+    clearTimeout(this.restartTimer);
+    this.restartTimer = null;
+    const child = this.child;
+    this.child = null;
+    if (child) {
       try {
-        this.child.kill();
+        child.kill();
       } catch {}
-      this.child = null;
     }
     this._set(false);
   }

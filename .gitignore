@@ -4,5 +4,7 @@ out/
 *.log
 .DS_Store
 
-# Not distributed
-models/MeiLin/
+# Models: only Tamamo is published. Every other model folder (including the
+# private MeiLin model) stays on this machine.
+models/*
+!models/Tamamo/
