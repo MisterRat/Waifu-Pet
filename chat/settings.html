@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Waifu Pet Settings</title>
+  <style>
+    :root {
+      --bg: #17142410;
+      --bg-solid: #171424;
+      --panel: #1e1a30;
+      --card: #252039;
+      --input: #2d2748;
+      --border: #3b3560;
+      --text: #ece8fa;
+      --muted: #9c95c0;
+      --accent: #8b6ff0;
+      --accent-hi: #a48cff;
+      --ok: #7fd08a;
+      --warn: #e0c068;
+      --err: #e07a7a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      background: var(--bg-solid);
+      color: var(--text);
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      grid-template-rows: 1fr auto;
+      grid-template-areas: "nav main" "nav foot";
+    }
+
+    /* ---- sidebar ---- */
+    nav {
+      grid-area: nav;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    nav .brand { font-size: 14px; font-weight: 600; padding: 4px 10px 14px; }
+    nav .brand small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); margin-top: 2px; }
+    nav button.tab {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%; text-align: left;
+      background: transparent; border: none; border-radius: 8px;
+      color: var(--muted); padding: 9px 10px; font-size: 13px; cursor: pointer;
+      font-family: inherit;
+    }
+    nav button.tab:hover { background: #2a2444; color: var(--text); }
+    nav button.tab.active { background: var(--accent); color: #fff; }
+    nav button.tab .ico { width: 16px; text-align: center; }
+
+    /* ---- content ---- */
+    main { grid-area: main; overflow-y: auto; padding: 22px 26px 12px; }
+    main::-webkit-scrollbar { width: 10px; }
+    main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg-solid); }
+    section.page { display: none; max-width: 560px; }
+    section.page.active { display: block; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .lead { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px 16px;
+      margin-bottom: 16px;
+    }
+    .card > h2 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--accent-hi); padding: 14px 0 4px; font-weight: 600;
+    }
+
+    /* a setting row: label+description left, control right */
+    .setting {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid #332d52;
+    }
+    .setting:last-child { border-bottom: none; }
+    .setting .txt { flex: 1; min-width: 0; }
+    .setting .name { font-size: 13px; color: var(--text); }
+    .setting .desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+    .setting .ctl { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+    .setting .ctl select { width: 200px; }
+    .setting .ctl input[type=range] { width: 150px; }
+    .setting .ctl .val { width: 34px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* stacked field */
+    .field { padding: 10px 0; border-bottom: 1px solid #332d52; }
+    .field:last-child { border-bottom: none; }
+    .field > label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    .field .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    input[type=text], input[type=password], input[type=number], textarea, select {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(139,111,240,.25);
+    }
+    textarea { resize: vertical; min-height: 76px; line-height: 1.4; }
+    select { cursor: pointer; }
+    option { background: var(--input); }
+
+    /* toggle switch */
+    input.switch {
+      appearance: none; -webkit-appearance: none;
+      width: 38px; height: 22px; flex: 0 0 auto;
+      background: #433c68; border-radius: 11px; position: relative;
+      cursor: pointer; transition: background .15s;
+      border: none; padding: 0; box-shadow: none;
+    }
+    input.switch::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 16px; height: 16px; border-radius: 50%; background: #fff;
+      transition: transform .15s;
+    }
+    input.switch:checked { background: var(--accent); }
+    input.switch:checked::after { transform: translateX(16px); }
+    input.switch:focus-visible { box-shadow: 0 0 0 3px rgba(139,111,240,.35); }
+
+    input[type=range] {
+      appearance: none; -webkit-appearance: none; height: 4px; padding: 0;
+      background: #433c68; border-radius: 2px; border: none; box-shadow: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent-hi); cursor: pointer; border: none;
+    }
+
+    /* buttons */
+    button.btn {
+      background: var(--accent); border: none; color: #fff; border-radius: 8px;
+      padding: 8px 16px; cursor: pointer; font-size: 13px; font-family: inherit;
+    }
+    button.btn:hover { background: var(--accent-hi); }
+    button.btn.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    button.btn.secondary:hover { background: #2d2748; }
+    button.btn.small { padding: 6px 12px; font-size: 12px; }
+    .actions { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+
+    .status { font-size: 12px; min-height: 16px; }
+    .ok { color: var(--ok); }
+    .err { color: var(--err); }
+    .chk { font-size: 12px; margin: 4px 0; }
+    .chk.ok { color: var(--ok); }
+    .chk.warn { color: var(--warn); }
+    .chk.error { color: var(--err); }
+    #modelCheck { padding-top: 2px; }
+
+    .bar { height: 6px; background: #433c68; border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+    /* footer */
+    footer {
+      grid-area: foot;
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 26px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+    }
+    footer .status { flex: 1; }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand">Waifu Pet<small>Settings</small></div>
+    <button class="tab active" data-page="pChat"><span class="ico">💬</span>Chat</button>
+    <button class="tab" data-page="pVoice"><span class="ico">🎙</span>Voice</button>
+    <button class="tab" data-page="pPet"><span class="ico">🦊</span>Pet</button>
+    <button class="tab" data-page="pBehaviour"><span class="ico">✨</span>Behaviour</button>
+    <button class="tab" data-page="pPerf"><span class="ico">⚡</span>Performance</button>
+  </nav>
+
+  <main>
+    <!-- ================= CHAT ================= -->
+    <section class="page active" id="pChat">
+      <h1>Chat</h1>
+      <p class="lead">Connect to any OpenAI-compatible server (Ollama, LM Studio, OpenWebUI, OpenAI…).</p>
+
+      <div class="card">
+        <h2>Server</h2>
+        <div class="field">
+          <label>Base URL</label>
+          <input id="chatBaseUrl" type="text" />
+        </div>
+        <div class="field">
+          <div class="grid2">
+            <div>
+              <label>API key</label>
+              <input id="chatApiKey" type="password" placeholder="optional for local servers" />
+            </div>
+            <div>
+              <label>Model</label>
+              <input id="chatModel" type="text" />
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="testChat" class="btn secondary small">Test connection</button>
+          <div id="chatStatus" class="status"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Replies</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Stream replies</div>
+            <div class="desc">Text appears as it is written and she starts speaking sentence by sentence.</div>
+          </div>
+          <div class="ctl"><input id="chatStream" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="field">
+          <label>System prompt</label>
+          <textarea id="systemPrompt"></textarea>
+          <div class="hint">Her personality. Emotion and motion tags for the loaded model are added automatically.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VOICE ================= -->
+    <section class="page" id="pVoice">
+      <h1>Voice</h1>
+      <p class="lead">Let her speak, and talk back to her.</p>
+
+      <div class="card">
+        <h2>Text-to-speech</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Enable TTS</div>
+            <div class="desc">She reads her replies aloud.</div>
+          </div>
+          <div class="ctl"><input id="ttsEnabled" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="field">
+          <label>Base URL</label>
+          <input id="ttsBaseUrl" type="text" />
+        </div>
+        <div class="field">
+          <div class="grid2">
+            <div>
+              <label>API key</label>
+              <input id="ttsApiKey" type="password" placeholder="optional for local servers" />
+            </div>
+            <div>
+              <label>Model</label>
+              <input id="ttsModel" type="text" />
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Voice</label>
+          <input id="ttsVoice" type="text" />
+        </div>
+        <div class="actions">
+          <button id="testTts" class="btn secondary small">Test TTS</button>
+          <div id="ttsStatus" class="status"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Voice input (built-in Whisper)</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Enable voice input</div>
+            <div class="desc">Runs on this PC, nothing is sent anywhere. The model downloads the first time you turn this on. Turning it off unloads Whisper and frees its memory.</div>
+          </div>
+          <div class="ctl"><input id="sttEnabled" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Model size</div>
+            <div class="desc">Larger is more accurate but slower and uses more memory.</div>
+          </div>
+          <div class="ctl">
+            <select id="sttModel">
+              <option value="tiny">Tiny (~40 MB, fastest)</option>
+              <option value="base">Base (~80 MB, recommended)</option>
+              <option value="small">Small (~250 MB, most accurate)</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Language</div>
+          </div>
+          <div class="ctl">
+            <select id="sttLanguage">
+              <option value="auto">Auto-detect</option>
+              <option value="english">English</option>
+              <option value="spanish">Spanish</option>
+              <option value="french">French</option>
+              <option value="german">German</option>
+              <option value="italian">Italian</option>
+              <option value="portuguese">Portuguese</option>
+              <option value="dutch">Dutch</option>
+              <option value="russian">Russian</option>
+              <option value="japanese">Japanese</option>
+              <option value="chinese">Chinese</option>
+              <option value="korean">Korean</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Send as soon as transcribed</div>
+            <div class="desc">Skip the review step and send the message immediately.</div>
+          </div>
+          <div class="ctl"><input id="sttAutoSend" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <div class="bar"><div id="sttBar" class="bar-fill"></div></div>
+          <div id="sttStatus" class="status" style="margin-top:6px">Off</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PET ================= -->
+    <section class="page" id="pPet">
+      <h1>Pet</h1>
+      <p class="lead">Which model is shown, and how it sits on your desktop.</p>
+
+      <div class="card">
+        <h2>Model</h2>
+        <div class="field">
+          <label>Model (from the models/ folder)</label>
+          <select id="petModel"></select>
+        </div>
+        <div class="field">
+          <label>Health check</label>
+          <div id="modelCheck"></div>
+        </div>
+        <div class="field">
+          <label>System prompt for this model</label>
+          <textarea id="modelSystemPrompt" placeholder="Blank = use the global prompt. e.g. You are a mischievous fox girl named …"></textarea>
+        </div>
+        <div class="field">
+          <label>Voice for this model</label>
+          <input id="modelVoice" type="text" placeholder="Blank = use the global voice. e.g. af_heart(.8)+zf_xiaoni(.2)" />
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Window</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Always on top</div>
+            <div class="desc">Keeps the pet and the chat window above other windows.</div>
+          </div>
+          <div class="ctl"><input id="alwaysOnTop" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt"><div class="name">Size</div></div>
+          <div class="ctl">
+            <select id="petScale">
+              <option value="0.5">50%</option>
+              <option value="0.75">75%</option>
+              <option value="1">100%</option>
+              <option value="1.25">125%</option>
+              <option value="1.5">150%</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Framing (this model)</h2>
+        <div class="setting">
+          <div class="txt"><div class="name">Zoom</div></div>
+          <div class="ctl"><input id="frameZoom" type="range" min="0.4" max="3" step="0.05" /><span class="val" id="frameZoomVal"></span></div>
+        </div>
+        <div class="setting">
+          <div class="txt"><div class="name">Horizontal position</div></div>
+          <div class="ctl"><input id="frameX" type="range" min="-0.5" max="0.5" step="0.01" /><span class="val" id="frameXVal"></span></div>
+        </div>
+        <div class="setting">
+          <div class="txt"><div class="name">Vertical position</div></div>
+          <div class="ctl"><input id="frameY" type="range" min="-0.5" max="0.5" step="0.01" /><span class="val" id="frameYVal"></span></div>
+        </div>
+        <div class="actions">
+          <button id="resetFrame" class="btn secondary small">Reset framing</button>
+          <div class="hint" style="color: var(--muted); font-size: 11px">Mouse wheel and right-drag on the pet also adjust this.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= BEHAVIOUR ================= -->
+    <section class="page" id="pBehaviour">
+      <h1>Behaviour</h1>
+      <p class="lead">How she acts when you are not talking to her.</p>
+
+      <div class="card">
+        <h2>Movement</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Eyes follow the mouse</div>
+            <div class="desc">Only while the cursor is moving.</div>
+          </div>
+          <div class="ctl"><input id="lookAtMouse" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Idle behaviour</div>
+            <div class="desc">Fidgets, glances and small mood changes.</div>
+          </div>
+          <div class="ctl"><input id="idleBehavior" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Tail wag intensity</div>
+            <div class="desc">Makes tail movement wider. 1× is the model's own motion.</div>
+          </div>
+          <div class="ctl"><input id="tailWagGain" type="range" min="1" max="4" step="0.1" /><span class="val" id="tailWagGainVal"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Speaking up</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">She speaks up now and then</div>
+            <div class="desc">Needs the chat server.</div>
+          </div>
+          <div class="ctl"><input id="proEnabled" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Greetings</div>
+            <div class="desc">Greet me at launch and welcome me back after a long absence.</div>
+          </div>
+          <div class="ctl"><input id="proGreetings" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="field">
+          <label>Remark every … minutes</label>
+          <div class="grid2">
+            <div>
+              <input id="proMin" type="number" min="5" max="600" step="5" />
+              <div class="hint">Shortest gap</div>
+            </div>
+            <div>
+              <input id="proMax" type="number" min="5" max="600" step="5" />
+              <div class="hint">Longest gap</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PERFORMANCE ================= -->
+    <section class="page" id="pPerf">
+      <h1>Performance</h1>
+      <p class="lead">Keep her light on your CPU and GPU.</p>
+
+      <div class="card">
+        <h2>Resource use</h2>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Frame-rate limit</div>
+            <div class="desc">Lower uses less power.</div>
+          </div>
+          <div class="ctl">
+            <select id="perfFps">
+              <option value="15">15 fps (lowest use)</option>
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+              <option value="0">Unlimited</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Stop drawing while hidden</div>
+            <div class="desc">Pauses rendering when the pet is hidden.</div>
+          </div>
+          <div class="ctl"><input id="perfPause" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Hide during fullscreen apps</div>
+            <div class="desc">Games and videos (Windows).</div>
+          </div>
+          <div class="ctl"><input id="perfFullscreen" class="switch" type="checkbox" /></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div id="saveStatus" class="status"></div>
+    <button id="close" class="btn secondary">Close</button>
+    <button id="save" class="btn">Save</button>
+  </footer>
+
+  <script src="settings.js"></script>
+</body>
+</html>

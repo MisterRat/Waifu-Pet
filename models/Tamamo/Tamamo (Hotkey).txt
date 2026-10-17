@@ -1,0 +1,5 @@
+Angry : Numb1
+Happy : Numb2
+Sad : Numb3
+
+Reset : Numb4

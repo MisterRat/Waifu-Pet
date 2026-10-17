@@ -1,0 +1,162 @@
+# Waifu Pet
+
+A Live2D desktop pet for Windows (Electron). She lives in a transparent,
+click-through window on your desktop: you can see and use everything under her
+except the pixels of the model itself. She chats through any OpenAI-compatible
+LLM, speaks through any OpenAI-compatible TTS server, and can listen through
+built-in Whisper speech-to-text (runs locally; the model downloads the first time voice input is enabled).
+
+The app is **model-agnostic**. Every folder in `models/` that contains a
+`*.model3.json` shows up as a choice in Settings; nothing in the code depends
+on a particular model. Tamamo is bundled and is the default.
+
+## Run
+
+```
+start.bat          (installs dependencies on first run, then starts)
+```
+
+or `npm install` once, then `npm start`. Requires Node.js 18+ and a Windows 10/11
+desktop. The tray icon has Show/Hide, Chat, Settings, Size, Model and Quit.
+
+## Build a single `.exe`
+
+```
+build.bat
+```
+
+installs dependencies, runs the tests and produces **`dist\WaifuPet.exe`**: one
+portable file (no installer) that you can move anywhere. Tamamo is bundled inside
+it. To add more models, put model folders into a `models` folder **next to the
+.exe**, or use the tray menu → *Open Models Folder*. A model there with the same
+folder name as a bundled one overrides it.
+
+Notes: the portable exe unpacks itself to a temporary folder on every launch, so
+startup takes a few seconds longer than `npm start`. Settings are stored in
+`%APPDATA%\waifu-pet`, shared with `npm start`. The exe is not code-signed, so
+Windows SmartScreen may warn the first time ("More info" → "Run anyway").
+
+## Using her
+
+| Action | Result |
+|---|---|
+| Left-click | She reacts |
+| Left-drag | Move her anywhere on any monitor |
+| Mouse wheel | Zoom the model inside the window |
+| Right-drag | Move the model up/down inside the window |
+| Tray → Chat | Open the chat window |
+
+Zoom and position are remembered **per model**.
+
+Behaviour (each part has an off switch in Settings):
+
+- Her eyes and head follow the mouse **only while it is moving**, anywhere on the
+  desktop, then she looks forward again. She looks forward while she talks.
+- When idle she fidgets, glances to the side and occasionally changes mood,
+  using only the motions and expressions her model actually has.
+- She speaks up now and then, greets you at launch and welcomes you back after
+  a long absence (needs the chat server).
+- Replies stream in and she starts speaking sentence by sentence.
+- Optional microphone button in chat (push to talk).
+- She hides while a fullscreen game or video runs, stops drawing while hidden,
+  and is capped at 30 fps by default.
+
+## Settings
+
+Open from the tray. Chat and TTS each take a base URL (for example
+`http://localhost:11434/v1`), an optional API key and a model name. Per model you
+can set a persona prompt, a TTS voice and the framing. The **Model check** panel
+lists what the selected model ships and what will work (blinking, lip sync, eye
+and head following, idle motions, oversized textures).
+
+Settings live in `%APPDATA%\waifu-pet\settings.json`. API keys are encrypted
+with Windows DPAPI and only the Settings window can read them.
+
+## Adding a model
+
+Drop a Live2D (Cubism 3/4/5) model folder into `models/` (or, for the packaged
+exe, a `models` folder next to it / `%APPDATA%\waifu-pet\models`); it appears in
+Settings and in the tray immediately, no restart needed. Optional files she makes use of:
+
+- `*.exp3.json` expressions. Their file names become the emotion tags the LLM may
+  use (`Happy.exp3.json` → `[happy]`). The chat window tells the LLM exactly which
+  tags the current model has.
+- `*.motion3.json` motions (in the folder or a `Motions/` subfolder). Files named
+  `Idle_*` loop while she is idle; every other motion is a reaction and a motion
+  tag (`Wave.motion3.json` → `[wave]`). Motions declared in `model3.json` are
+  honoured too (group `Idle` = idle loop).
+- A `.cdi3.json` file, so the Model check can verify the parameters.
+- Blink and lip-sync parameters come from the model's `EyeBlink` / `LipSync`
+  groups; the Cubism-standard names are the fallback.
+
+## Command-line flags
+
+`npm start -- <flags>`
+
+| Flag | Purpose |
+|---|---|
+| `--model <folder>` | Load a specific model for this run |
+| `--tint` | Faint red wash: shows whether the window is truly transparent |
+| `--opaque` | Disable window transparency |
+| `--diag` | Log GL info and scan the model for broken drawables |
+| `--diag-log <file>` | Also write renderer console output to a file |
+| `--probe=<ParamId[:value]>` | Force a Live2D parameter (debugging a rig) |
+| `--shot <file>` | Save a screenshot of the pet window after loading |
+| `--nomotion`, `--noblink`, `--noexpr`, `--nolipsync`, `--noidle` | Switch subsystems off to isolate a rendering problem |
+
+## Troubleshooting
+
+- **Solid box instead of a transparent window:** run with `--tint`. If you see a
+  black/white box, Windows isn't compositing the window as transparent; update
+  the GPU driver or try software rendering (`--cpu`).
+- **Parts of the model missing or garbled:** check the Model check panel. Textures
+  larger than 4096×4096 fail on some GPUs; downscale them.
+- **No voice:** use *Test TTS* in Settings; check the server is running.
+- **Log file:** `%APPDATA%\waifu-pet\boot-trace.log`.
+
+## Project layout
+
+```
+main.js            Electron main process: windows, tray, cursor tracking, fullscreen, proactive
+ipc.js             Chat / streaming / TTS proxies, speech-to-text IPC, prompts, settings access
+stt.js             Built-in Whisper lifecycle (download, load, unload)
+stt-worker.js      Whisper worker process (Transformers.js)
+speechText.js      Strips [tags] so they are never spoken
+settings.js        Settings store (atomic writes, encrypted API keys)
+models.js          Model discovery and the model health check
+server.js          Local static file server (whitelisted folders, loopback only)
+fullscreen.js      Fullscreen-app detection (Windows)
+proactive.js       Greetings / welcome-back / remark scheduler
+extractContent.js  Parsing of chat completion responses and SSE streams
+preload.js         Bridge between the windows and the main process
+renderer/          Pet window: pet.js, idle.js, expressions.js, tagParser.js, lipsync.js, debug.js
+chat/              Chat and Settings windows
+assets/            Tray icon and app icon (npm run icon generates icon.png)
+vendor/            Live2D Cubism Core, Pixi and the Live2D plugin (copied from node_modules by npm install)
+models/            Bundled / dev models (one folder each)
+build.bat          Builds dist\WaifuPet.exe
+start.bat          Installs dependencies if needed and runs the app
+tests/             npm test
+```
+
+## Tests
+
+`npm test` runs unit tests for the parsers, idle and proactive scheduling,
+settings, model inspection, and an integration test of the streaming chat path
+against a local fake server.
+
+## Security notes
+
+- The local file server only serves `renderer/`, `chat/`, `vendor/`, `assets/` and
+  the model folders, and only answers loopback hosts.
+- All windows are sandboxed with context isolation; popups and navigation away
+  from the app are blocked, and every permission request is denied except
+  microphone capture for the chat window.
+- Chat and TTS requests are made by the main process, so API keys
+  never reach the web pages.
+
+## Licensing
+
+The Live2D Cubism Core in `vendor/` is proprietary and subject to Live2D's
+license. Each model in `models/` is subject to its own license; only ship models
+you have the right to distribute.

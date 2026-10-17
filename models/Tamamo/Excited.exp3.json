@@ -1,0 +1,81 @@
+{
+	"Type": "Live2D Expression",
+	"IsModelCustomizationExpression": false,
+	"Parameters": [
+		{
+			"Id": "ParamMouthForm",
+			"Value": 1,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamCheek",
+			"Value": 0.85,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamEyeLOpen",
+			"Value": 0.3,
+			"Blend": "Add"
+		},
+		{
+			"Id": "ParamEyeROpen",
+			"Value": 0.3,
+			"Blend": "Add"
+		},
+		{
+			"Id": "ParamEyeLSmile",
+			"Value": 0.85,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamEyeRSmile",
+			"Value": 0.85,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowLY",
+			"Value": 0.7,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowRY",
+			"Value": 0.7,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowLAngle",
+			"Value": 0.2,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowRAngle",
+			"Value": 0.2,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowLForm",
+			"Value": 0.5,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "ParamBrowRForm",
+			"Value": 0.5,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "Param4",
+			"Value": 1,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "Param34",
+			"Value": -0.5,
+			"Blend": "Overwrite"
+		},
+		{
+			"Id": "Param36",
+			"Value": 0.6,
+			"Blend": "Overwrite"
+		}
+	]
+}

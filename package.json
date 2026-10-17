@@ -1,0 +1,84 @@
+{
+  "name": "waifu-pet",
+  "version": "1.0.0",
+  "description": "Live2D desktop pet with OpenAI-compatible chat, voice and proactive companionship",
+  "author": "Waifu Pet",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "node scripts/copy-vendor.js",
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js",
+    "test": "node tests/run.js && node tests/ipc-test.js",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "overrides": {
+    "gh-pages": "^6.3.0"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.1"
+  },
+  "allowScripts": {
+    "onnxruntime-node": true,
+    "electron-winstaller": false,
+    "protobufjs": false
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.0.0",
+    "pixi.js": "5.3.12",
+    "pixi-live2d-display": "0.4.0"
+  },
+  "build": {
+    "appId": "com.waifupet.desktop",
+    "productName": "Waifu Pet",
+    "asar": true,
+    "npmRebuild": false,
+    "compression": "normal",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "ipc.js",
+      "server.js",
+      "settings.js",
+      "models.js",
+      "extractContent.js",
+      "speechText.js",
+      "stt.js",
+      "stt-worker.js",
+      "preload.js",
+      "fullscreen.js",
+      "proactive.js",
+      "renderer/**/*",
+      "chat/**/*",
+      "vendor/**/*",
+      "assets/**/*",
+      "models/Tamamo/**/*",
+      "!node_modules/onnxruntime-web/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "portable": {
+      "artifactName": "WaifuPet.exe"
+    },
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ]
+  }
+}
