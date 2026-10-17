@@ -10,6 +10,15 @@ The app is **model-agnostic**. Every folder in `models/` that contains a
 `*.model3.json` shows up as a choice in Settings; nothing in the code depends
 on a particular model. Tamamo is bundled and is the default.
 
+## Download
+
+Ready-built `WaifuPet.exe` files are on the repo's **Releases** page. GitHub
+builds one each night when something new has been merged into `main`; the
+**Run workflow** button on the Actions tab (*Build Windows exe*) builds one on
+demand. The exe includes the Tamamo model; put any other model folder into a
+`models` folder next to the exe. It isn't code-signed, so Windows SmartScreen
+may ask you to confirm the first time (**More info → Run anyway**).
+
 ## Run
 
 ```
