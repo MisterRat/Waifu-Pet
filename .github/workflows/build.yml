@@ -1,0 +1,129 @@
+# Builds WaifuPet.exe on a Windows runner.
+#
+# - Once a day: if anything was merged into main since the last release, build
+#   it and publish a GitHub Release with WaifuPet.exe attached. Days with no new
+#   commits are skipped.
+# - "Run workflow" button (Actions tab): build and publish now, even if nothing
+#   changed.
+# - Pull requests: run the tests and a full build to prove the PR still builds.
+#   Nothing is published; the exe is kept for a few days as a run artifact.
+#
+# Only models in the repo (Tamamo) are bundled. Other models go in a "models"
+# folder next to the exe.
+name: Build Windows exe
+
+on:
+  schedule:
+    # 07:17 UTC = 2:17 AM Central (daylight time), 1:17 AM in winter.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Anything new since the last release?
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - name: Compare main with the latest release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "publish=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Scheduled run: skip if the latest release was built from this commit.
+          last_tag=$(gh release list --repo "$REPO" --limit 1 --json tagName --jq '.[0].tagName // ""')
+          last_sha=""
+          if [ -n "$last_tag" ]; then
+            last_sha=$(gh api "repos/$REPO/commits/$last_tag" --jq .sha 2>/dev/null || true)
+          fi
+          if [ "$last_sha" = "$HEAD_SHA" ]; then
+            echo "No new commits since $last_tag; skipping."
+            echo "build=false" >> "$GITHUB_OUTPUT"; echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New commits since ${last_tag:-the first release}; building."
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build WaifuPet.exe
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the exe
+        env:
+          # No code-signing certificate: don't go looking for one.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist
+
+      - name: Keep the exe as a run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaifuPet-${{ github.sha }}
+          path: dist/WaifuPet.exe
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 5 || 30 }}
+
+  release:
+    name: Publish the release
+    needs: [check, build]
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: WaifuPet-${{ github.sha }}
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          day=$(TZ=America/Chicago date +%Y-%m-%d)
+          tag="build-$day-${SHA::7}"
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+            # Same commit already released today (a second manual run): refresh the exe.
+            gh release upload "$tag" WaifuPet.exe --repo "$REPO" --clobber
+          else
+            gh release create "$tag" WaifuPet.exe \
+              --repo "$REPO" \
+              --target "$SHA" \
+              --title "Waifu Pet $day" \
+              --generate-notes \
+              --latest
+          fi
