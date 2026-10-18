@@ -102,8 +102,10 @@
       this.pause = opts.pause;
       this.resume = opts.resume;
       this.resumeDelayMs = opts.resumeDelayMs ?? 350;
-      this._setTimeout = opts.setTimeout || setTimeout;
-      this._clearTimeout = opts.clearTimeout || clearTimeout;
+      // Wrapped: browsers throw "Illegal invocation" if the global timer
+      // functions are called as methods of another object.
+      this._setTimeout = opts.setTimeout || ((fn, ms) => setTimeout(fn, ms));
+      this._clearTimeout = opts.clearTimeout || ((id) => clearTimeout(id));
       this.timer = null;
       this.busy = null; // unknown until the first update
       this.listening = false; // the listener starts paused
