@@ -4,6 +4,7 @@
   "description": "Live2D desktop pet with OpenAI-compatible chat, voice and proactive companionship",
   "author": "Waifu Pet",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "main": "main.js",
   "scripts": {
     "postinstall": "node scripts/copy-vendor.js",
