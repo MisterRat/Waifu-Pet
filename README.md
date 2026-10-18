@@ -184,10 +184,15 @@ path against a local fake server.
 
 ## Licensing
 
-**The Tamamo model (`models/Tamamo/`) was commissioned by MisterRat, who owns
-all rights to it, including commercial rights. All rights reserved: it is not
-licensed for reuse, modification or redistribution outside this project.**
+The code is released under the [MIT License](LICENSE), with these exceptions:
 
-The Live2D Cubism Core in `vendor/` is proprietary and subject to Live2D's
-license. Each model in `models/` is subject to its own license; only ship models
-you have the right to distribute.
+- **The Tamamo model (`models/Tamamo/`) is not covered by the MIT License. It
+  was commissioned by MisterRat, who owns all rights to it, including commercial
+  rights. All rights reserved: it is not licensed for reuse, modification or
+  redistribution outside this project** (see `models/Tamamo/LICENSE.txt`).
+- The Live2D Cubism Core (`vendor/live2dcubismcore.min.js`) is proprietary and
+  subject to Live2D's own license.
+- Third-party libraries keep their own licenses (PixiJS and pixi-live2d-display
+  are MIT).
+- Any other model you add to `models/` is subject to its own license; only ship
+  models you have the right to distribute.
