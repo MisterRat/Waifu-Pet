@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const { startStaticServer } = require("./server");
 const { SettingsStore } = require("./settings");
+const { HistoryStore } = require("./history");
 const { registerIpc, completeChat, buildSystemPrompt } = require("./ipc");
 const { SttService } = require("./stt");
 const { FullscreenWatcher } = require("./fullscreen");
@@ -72,6 +73,7 @@ let httpServer = null;
 let port = 0;
 let petSpeaking = false; // reported by the pet window; used by conversation mode
 let settings = null;
+let chatHistory = null; // saved conversation per model (history.js)
 let petWin = null;
 let chatWin = null;
 let settingsWin = null;
@@ -255,7 +257,12 @@ function createPetWindow(pos) {
     modelIdx > -1 && process.argv[modelIdx + 1]
       ? process.argv[modelIdx + 1]
       : resolveModelName(settings.get());
+  const previousModel = loadedModel;
   loadedModel = modelName || null;
+  // A different model has its own conversation: the open chat window reloads it.
+  if (previousModel && previousModel !== loadedModel && chatWin && !chatWin.isDestroyed()) {
+    chatWin.webContents.send("chat:model-changed", { model: loadedModel });
+  }
   const modelQs = modelName ? "model=" + encodeURIComponent(modelName) : null;
   // --probe=<ParamId[:value],...> forces Live2D parameters (rig debugging).
   const probeArg = process.argv.find((a) => a.startsWith("--probe="));
@@ -394,7 +401,8 @@ function installDwmWatchdog() {
 
 /**
  * Ask the LLM for one unprompted line (greeting / welcome back / remark) and
- * have the pet act it out. Also shows it in the chat log if that window is open.
+ * have the pet act it out. It is saved to that model's conversation and shown in
+ * the chat log if that window is open.
  */
 async function deliverProactiveLine(kind, ctx) {
   const cfg = settings.get();
@@ -406,7 +414,9 @@ async function deliverProactiveLine(kind, ctx) {
   const text = await completeChat(cfg, messages, { max_tokens: 120 });
   if (!petWin || petWin.isDestroyed()) return;
   petWin.webContents.send("chat:line", { text, speak: cfg.tts.enabled !== false, proactive: true });
-  if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("chat:assistant-line", { text });
+  // Remarks are part of the conversation whether or not the chat window is open.
+  if (chatHistory && loadedModel) chatHistory.append(loadedModel, [{ role: "assistant", content: text }]);
+  if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("chat:assistant-line", { text, model: loadedModel });
 }
 
 function buildTray() {
@@ -683,6 +693,7 @@ if (!gotLock) {
     console.log("[main] app ready, starting static server…");
     setModelRoots(computeModelRoots());
     // Encrypt API keys at rest with the OS keystore (DPAPI on Windows).
+    chatHistory = new HistoryStore(app.getPath("userData"));
     settings = new SettingsStore(app.getPath("userData"), {
       isAvailable: () => safeStorage.isEncryptionAvailable(),
       encrypt: (s) => safeStorage.encryptString(s),
@@ -706,6 +717,7 @@ if (!gotLock) {
     registerIpc(settings, {
       getLoadedModel: () => loadedModel,
       getOrigin: () => (port ? `http://127.0.0.1:${port}` : ""),
+      history: chatHistory,
       onSettingsChanged,
       stt,
     });

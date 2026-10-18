@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld("pet", {
   ttsSpeak: (text) => ipcRenderer.invoke("tts:speak", { text }),
   sttTranscribe: (audio) => ipcRenderer.invoke("stt:transcribe", { audio }), // Float32Array, 16 kHz mono
   sttStatus: () => ipcRenderer.invoke("stt:status"),
+  historyGet: () => ipcRenderer.invoke("history:get"), // chat window: { model, messages }
+  historyAppend: (model, messages) => ipcRenderer.invoke("history:append", { model, messages }),
+  historyClear: (model) => ipcRenderer.invoke("history:clear", { model }),
   onSttStatus: (cb) => ipcRenderer.on("stt:status", (_e, status) => cb(status)),
 
   // settings / models
@@ -54,4 +57,5 @@ contextBridge.exposeInMainWorld("pet", {
   onChatDone: (cb) => on("chat:done", cb),
   onAssistantLine: (cb) => on("chat:assistant-line", cb), // unprompted line to add to the chat log
   onPetSpeaking: (cb) => on("pet:speaking", cb), // chat window: she started/stopped speaking
+  onModelChanged: (cb) => on("chat:model-changed", cb), // chat window: another model was loaded
 });
