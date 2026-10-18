@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("pet", {
   closeChat: () => ipcRenderer.send("chat:close"),
   closeSettings: () => ipcRenderer.send("settings:close"),
   pushLine: (payload) => ipcRenderer.send("chat:push-line", payload),
+  setSpeaking: (speaking) => ipcRenderer.send("pet:speaking", !!speaking), // pet window: TTS audio playing or queued
 
   // chat
   chatSend: (messages) => ipcRenderer.invoke("chat:send", { messages }),
@@ -52,4 +53,5 @@ contextBridge.exposeInMainWorld("pet", {
   onChatDelta: (cb) => on("chat:delta", cb), // streamed reply text
   onChatDone: (cb) => on("chat:done", cb),
   onAssistantLine: (cb) => on("chat:assistant-line", cb), // unprompted line to add to the chat log
+  onPetSpeaking: (cb) => on("pet:speaking", cb), // chat window: she started/stopped speaking
 });

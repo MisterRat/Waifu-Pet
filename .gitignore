@@ -1,4 +1,6 @@
 node_modules/
+# Voice-detection runtime, copied from node_modules on npm install (~17 MB)
+vendor/vad/
 dist/
 out/
 *.log

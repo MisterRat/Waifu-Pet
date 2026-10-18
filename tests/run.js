@@ -659,4 +659,111 @@ test("fullscreen: watcher restarts after PowerShell exits, and stop() ends it", 
   assert.strictEqual(kids.length, 2, "never runs off Windows");
 });
 
+// --- conversation mode (chat/conversation.js) ---
+const Conv = require("../chat/conversation.js");
+
+function fakeTimers() {
+  const t = { now: 0, jobs: [] };
+  t.setTimeout = (fn, ms) => {
+    const job = { fn, at: t.now + ms };
+    t.jobs.push(job);
+    return job;
+  };
+  t.clearTimeout = (job) => (t.jobs = t.jobs.filter((j) => j !== job));
+  t.advance = (ms) => {
+    t.now += ms;
+    for (const j of t.jobs.filter((j) => j.at <= t.now)) {
+      t.jobs = t.jobs.filter((x) => x !== j);
+      j.fn();
+    }
+  };
+  return t;
+}
+
+test("conversation: half-duplex gate pauses at once and resumes after a short gap", () => {
+  const log = [];
+  const t = fakeTimers();
+  const g = new Conv.HalfDuplexGate({
+    pause: () => log.push("pause"),
+    resume: () => log.push("resume"),
+    resumeDelayMs: 350,
+    setTimeout: t.setTimeout,
+    clearTimeout: t.clearTimeout,
+  });
+  g.update(false); // idle at start
+  t.advance(349);
+  assert.deepStrictEqual(log, [], "not before the gap");
+  t.advance(1);
+  assert.deepStrictEqual(log, ["resume"]);
+  g.update(true); // she starts speaking
+  assert.deepStrictEqual(log, ["resume", "pause"], "paused immediately");
+  g.update(true); // repeated signal changes nothing
+  g.update(false); // she stops...
+  t.advance(200);
+  g.update(true); // ...and starts the next sentence before the gap ends
+  t.advance(1000);
+  assert.deepStrictEqual(log, ["resume", "pause"], "never listened between her sentences");
+  g.update(false);
+  t.advance(350);
+  assert.deepStrictEqual(log, ["resume", "pause", "resume"]);
+  g.update(true);
+  g.stop();
+  g.update(false);
+  t.advance(1000);
+  assert.deepStrictEqual(log, ["resume", "pause", "resume", "pause", "resume"], "a stopped gate starts fresh");
+  // Busy before it ever listened: nothing to pause.
+  const log2 = [];
+  const g2 = new Conv.HalfDuplexGate({ pause: () => log2.push("pause"), resume: () => log2.push("resume"), setTimeout: t.setTimeout, clearTimeout: t.clearTimeout });
+  g2.update(true);
+  assert.deepStrictEqual(log2, []);
+});
+
+test("conversation: listener wires the detector and reports its states", async () => {
+  const states = [];
+  const heard = [];
+  let opts = null;
+  const calls = [];
+  const fakeVad = {
+    MicVAD: {
+      async new(o) {
+        opts = o;
+        return {
+          start: async () => calls.push("start"),
+          pause: async () => calls.push("pause"),
+          destroy: () => calls.push("destroy"),
+        };
+      },
+    },
+  };
+  const l = await Conv.createConversationListener({ vad: fakeVad, onState: (s) => states.push(s), onUtterance: (a) => heard.push(a) });
+  assert.strictEqual(opts.baseAssetPath, "/vendor/vad/", "files come from the app, never a CDN");
+  assert.strictEqual(opts.onnxWASMBasePath, "/vendor/vad/");
+  assert.strictEqual(opts.model, "v5");
+  assert.strictEqual(opts.startOnLoad, false, "nothing is heard until resume()");
+  const ort = { env: { wasm: {} } };
+  opts.ortConfig(ort);
+  assert.strictEqual(ort.env.wasm.numThreads, 1);
+  await l.resume();
+  opts.onSpeechRealStart();
+  const audio = new Float32Array(16000);
+  opts.onSpeechEnd(audio);
+  await l.pause();
+  l.destroy();
+  await l.resume(); // after destroy: ignored
+  assert.deepStrictEqual(states, ["starting", "listening", "hearing", "listening", "paused"]);
+  assert.strictEqual(heard[0], audio);
+  assert.deepStrictEqual(calls, ["start", "pause", "destroy"]);
+  await assert.rejects(Conv.createConversationListener({ vad: {}, onState() {}, onUtterance() {} }), /npm install/);
+});
+
+test("conversation: status line", () => {
+  const s = (o) => Conv.statusLabel({ petSpeaking: false, thinking: false, transcribing: false, listenerState: "listening", ...o }, "Tamamo");
+  assert.strictEqual(s({}).text, "Listening");
+  assert.strictEqual(s({ listenerState: "hearing" }).text, "Hearing you…");
+  assert.strictEqual(s({ transcribing: true }).text, "Got it…");
+  assert.strictEqual(s({ thinking: true }).text, "Tamamo is thinking…");
+  assert.strictEqual(s({ petSpeaking: true, thinking: true }).text, "Tamamo is speaking");
+  assert.strictEqual(s({ listenerState: "paused" }).text, "Paused");
+});
+
 Promise.all(pending).then(() => console.log(`\n${passed} tests passed`));

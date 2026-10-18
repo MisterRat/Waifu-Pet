@@ -24,10 +24,11 @@
     "protobufjs": false
   },
   "devDependencies": {
+    "@ricky0123/vad-web": "^0.0.29",
     "electron": "^44.5.1",
     "electron-builder": "^26.0.0",
-    "pixi.js": "5.3.12",
-    "pixi-live2d-display": "0.4.0"
+    "pixi-live2d-display": "0.4.0",
+    "pixi.js": "5.3.12"
   },
   "build": {
     "appId": "com.waifupet.desktop",

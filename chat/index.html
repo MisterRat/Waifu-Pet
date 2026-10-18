@@ -113,6 +113,33 @@
     }
     #mic[hidden] { display: none; }
     #mic.rec { background: #b3404a; border-color: #d0606a; animation: pulse 1s infinite; }
+    #mic:disabled, #talk:disabled { opacity: 0.45; cursor: default; }
+    #talk {
+      background: #2f2a48;
+      border: 1px solid #4a4468;
+      color: #e8e4f5;
+      border-radius: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #talk[hidden] { display: none; }
+    #talk.on { background: #2f7a5a; border-color: #4fb08a; }
+    #convStatus {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: #b8b2d6;
+      background: #24203a;
+    }
+    #convStatus[hidden] { display: none; }
+    #convStatus .dot { width: 8px; height: 8px; border-radius: 50%; background: #6a6488; }
+    #convStatus.listening .dot { background: #4fd08a; }
+    #convStatus.hearing .dot { background: #e0506a; animation: pulse 0.6s infinite; }
+    #convStatus.pet .dot { background: #a080f0; }
+    #convStatus.busy .dot { background: #e0b040; animation: pulse 1s infinite; }
     @keyframes pulse { 50% { opacity: 0.6; } }
   </style>
 </head>
@@ -125,12 +152,15 @@
     </div>
   </div>
   <div id="messages"></div>
+  <div id="convStatus" hidden><span class="dot"></span><span id="convText"></span></div>
   <div id="inputrow">
     <input id="input" type="text" placeholder="Say something…" autocomplete="off" />
     <button id="mic" title="Click to talk, click again to send" hidden>🎤</button>
+    <button id="talk" title="Conversation mode: just talk, she answers when you pause" aria-pressed="false" hidden>🗣</button>
     <button id="send">Send</button>
   </div>
   <script src="../renderer/tagParser.js"></script>
+  <script src="conversation.js"></script>
   <script src="chat.js"></script>
 </body>
 </html>
