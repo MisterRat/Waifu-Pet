@@ -66,6 +66,7 @@ Behaviour (each part has an off switch in Settings):
 - She speaks up now and then, greets you at launch and welcomes you back after
   a long absence (needs the chat server).
 - Replies stream in and she starts speaking sentence by sentence.
+- 🗑 in the chat title bar clears the conversation (what she remembers and the log).
 - Voice input in chat (turn on *Voice input* in Settings):
   - 🎤 push to talk: click, speak, click again.
   - 🗣 **conversation mode**: hands-free. Just talk; when you pause she

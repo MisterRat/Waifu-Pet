@@ -11,6 +11,7 @@ const micBtn = $("mic");
 const talkBtn = $("talk");
 
 let history = []; // [{role, content}]
+let historyGen = 0; // bumped by Clear; a reply started before it is not kept
 let systemPrompt = "You are a cheerful anime desktop pet.";
 let vocab = { name: "", emotions: [], motions: [] }; // tags of the loaded model
 let cfg = { chat: {}, stt: {} };
@@ -168,6 +169,7 @@ async function send(spoken) {
   if (!fromVoice) input.value = "";
   addMsg("user", text);
   history.push({ role: "user", content: text });
+  const gen = historyGen;
 
   busy = true;
   convUpdate();
@@ -182,12 +184,13 @@ async function send(spoken) {
       const res = await window.pet.chatSend(apiMessages);
       const content = (res && res.content) || "(no reply)";
       bubble.textContent = displayText(content) || content;
+      if (gen !== historyGen) return; // cleared while waiting
       history.push({ role: "assistant", content });
       window.pet.pushLine({ text: content, speak: speakOn });
     } else {
       const { content } = await streamReply(apiMessages, bubble);
       current = null;
-      if (content) history.push({ role: "assistant", content });
+      if (content && gen === historyGen) history.push({ role: "assistant", content });
     }
   } catch (e) {
     bubble.textContent = "⚠ " + (e && e.message ? e.message : String(e));
@@ -205,6 +208,20 @@ sendBtn.addEventListener("click", () => send());
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();
 });
+
+// Clear: forget the conversation (what she remembers and what is shown), stop
+// a reply that is still streaming and cut off whatever she is saying. Same as
+// Project-Waifu's Clear button; there is no greeting to restore here.
+function clearChat() {
+  if (current) current.cancel();
+  else window.pet.pushLine({ text: "", speak: false });
+  history = [];
+  historyGen++;
+  messagesEl.textContent = "";
+  addMsg("sys", "Chat cleared");
+  input.focus();
+}
+$("clear").addEventListener("click", clearChat);
 
 speakBtn.addEventListener("click", () => {
   speakOn = !speakOn;
