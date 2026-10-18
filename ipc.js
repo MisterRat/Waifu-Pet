@@ -68,11 +68,16 @@ function sanitizeMessages(messages) {
  * @param {string} [origin] e.g. "http://127.0.0.1:51234"
  */
 function isSettingsSender(e, origin) {
+  return isPageSender(e, origin, "/chat/settings.html");
+}
+
+/** True when the IPC message came from our own page at `pathname`. */
+function isPageSender(e, origin, pathname) {
   try {
     const url = (e.senderFrame && e.senderFrame.url) || e.sender.getURL();
     const u = new URL(url);
     if (origin && u.origin !== origin) return false;
-    return u.pathname === "/chat/settings.html";
+    return u.pathname === pathname;
   } catch {
     return false;
   }
@@ -243,6 +248,7 @@ function safeSend(wc, channel, payload) {
  */
 function registerIpc(settings, hooks = {}) {
   const fromSettings = (e) => isSettingsSender(e, hooks.getOrigin && hooks.getOrigin());
+  const fromChat = (e) => isPageSender(e, hooks.getOrigin && hooks.getOrigin(), "/chat/index.html");
   const activeModel = () => (hooks.getLoadedModel && hooks.getLoadedModel()) || resolveModelName(settings.get());
 
   // API keys only go to the settings window; the pet and chat windows get a
@@ -261,6 +267,27 @@ function registerIpc(settings, hooks = {}) {
   // restarting the app.
   ipcMain.handle("models:list", () => listModels());
   ipcMain.handle("models:vocab", () => modelVocab(activeModel()));
+
+  // --- Saved conversation, per model (chat window only) ---
+  // The chat window names the model it is showing, so a reply that finishes
+  // after a model switch is saved with the model it belongs to.
+  const history = hooks.history;
+  const notChat = () => new Error("chat history is only available to the chat window");
+  ipcMain.handle("history:get", (e) => {
+    if (!fromChat(e)) throw notChat();
+    const model = activeModel();
+    return { model, messages: history ? history.get(model) : [] };
+  });
+  ipcMain.handle("history:append", (e, payload) => {
+    if (!fromChat(e)) throw notChat();
+    if (history && payload) history.append(String(payload.model || ""), payload.messages);
+    return true;
+  });
+  ipcMain.handle("history:clear", (e, payload) => {
+    if (!fromChat(e)) throw notChat();
+    if (history && payload) history.clear(String(payload.model || ""));
+    return true;
+  });
   ipcMain.handle("models:inspect", (_e, name) => inspectModel(String(name || "")));
 
   // System prompt for the model that is currently loaded (persona + its tags).

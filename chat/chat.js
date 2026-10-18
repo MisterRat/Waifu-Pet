@@ -10,8 +10,10 @@ const speakBtn = $("speak");
 const micBtn = $("mic");
 const talkBtn = $("talk");
 
-let history = []; // [{role, content}]
-let historyGen = 0; // bumped by Clear; a reply started before it is not kept
+let history = []; // [{role, content}] — this model's saved conversation
+let historyModel = ""; // the model whose conversation is shown
+let historyGen = 0; // bumped by Clear / model switch; a reply started before it is not kept
+const SHOWN_ON_OPEN = 100; // messages shown when the window opens (all are kept)
 let systemPrompt = "You are a cheerful anime desktop pet.";
 let vocab = { name: "", emotions: [], motions: [] }; // tags of the loaded model
 let cfg = { chat: {}, stt: {} };
@@ -170,6 +172,9 @@ async function send(spoken) {
   addMsg("user", text);
   history.push({ role: "user", content: text });
   const gen = historyGen;
+  const model = historyModel;
+  const save = (role, content) => window.pet.historyAppend(model, [{ role, content }]).catch(() => {});
+  save("user", text);
 
   busy = true;
   convUpdate();
@@ -186,11 +191,15 @@ async function send(spoken) {
       bubble.textContent = displayText(content) || content;
       if (gen !== historyGen) return; // cleared while waiting
       history.push({ role: "assistant", content });
+      save("assistant", content);
       window.pet.pushLine({ text: content, speak: speakOn });
     } else {
       const { content } = await streamReply(apiMessages, bubble);
       current = null;
-      if (content && gen === historyGen) history.push({ role: "assistant", content });
+      if (content && gen === historyGen) {
+        history.push({ role: "assistant", content });
+        save("assistant", content);
+      }
     }
   } catch (e) {
     bubble.textContent = "⚠ " + (e && e.message ? e.message : String(e));
@@ -209,18 +218,43 @@ input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();
 });
 
-// Clear: forget the conversation (what she remembers and what is shown), stop
+// Show this model's saved conversation (on open, and after a model switch).
+async function loadHistory() {
+  try {
+    const { model, messages } = await window.pet.historyGet();
+    history = Array.isArray(messages) ? messages : [];
+    historyModel = model || "";
+  } catch {
+    history = [];
+  }
+  historyGen++;
+  messagesEl.textContent = "";
+  const shown = history.slice(-SHOWN_ON_OPEN);
+  if (history.length > shown.length) addMsg("sys", `${history.length - shown.length} earlier messages not shown`);
+  for (const m of shown) addMsg(m.role, m.role === "assistant" ? displayText(m.content) || m.content : m.content);
+}
+
+// Clear: forget this model's conversation (saved, remembered and shown), stop
 // a reply that is still streaming and cut off whatever she is saying. Same as
-// Project-Waifu's Clear button; there is no greeting to restore here.
+// Project-Waifu's Clear button; there is no greeting to restore here. Other
+// models' conversations are kept.
 function clearChat() {
   if (current) current.cancel();
   else window.pet.pushLine({ text: "", speak: false });
   history = [];
   historyGen++;
+  window.pet.historyClear(historyModel).catch(() => {});
   messagesEl.textContent = "";
   addMsg("sys", "Chat cleared");
   input.focus();
 }
+
+// Another model was loaded: stop the reply in progress and show her conversation.
+window.pet.onModelChanged(async () => {
+  if (current) current.cancel();
+  await loadHistory();
+  refreshPrompt();
+});
 $("clear").addEventListener("click", clearChat);
 
 speakBtn.addEventListener("click", () => {
@@ -466,8 +500,9 @@ document.addEventListener("visibilitychange", convUpdate);
 window.addEventListener("beforeunload", () => conv.listener && conv.listener.destroy());
 
 // An unprompted line from the pet (greeting, remark): show it in the log and
-// remember it as part of the conversation.
-window.pet.onAssistantLine(({ text }) => {
+// remember it as part of the conversation (main has already saved it).
+window.pet.onAssistantLine(({ text, model }) => {
+  if (model && model !== historyModel) return;
   addMsg("assistant", displayText(text) || text);
   history.push({ role: "assistant", content: text });
 });
@@ -478,6 +513,7 @@ window.pet
   .settingsGet()
   .then(async (s) => {
     await refreshPrompt();
+    await loadHistory();
     speakOn = s.tts.enabled !== false;
     speakBtn.textContent = speakOn ? "🔊" : "🔇";
     speakBtn.classList.toggle("off", !speakOn);

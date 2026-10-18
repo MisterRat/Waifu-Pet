@@ -6,13 +6,14 @@ const assert = require("assert");
 const http = require("http");
 const Module = require("module");
 
-// Stub "electron" before ipc.js loads it.
+// Stub "electron" before ipc.js loads it; registered handlers are kept here.
+const handlers = {};
 const realLoad = Module._load;
 Module._load = function (request, ...rest) {
-  if (request === "electron") return { ipcMain: { handle() {}, on() {} } };
+  if (request === "electron") return { ipcMain: { handle: (ch, fn) => (handlers[ch] = fn), on() {} } };
   return realLoad.call(this, request, ...rest);
 };
-const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt } = require("../ipc");
+const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt, registerIpc } = require("../ipc");
 Module._load = realLoad;
 
 let passed = 0;
@@ -132,6 +133,35 @@ const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: te
     // The bundled models folder is used if present; with no match it is just the persona.
     const p = buildSystemPrompt(cfg, "no-such-model");
     assert.strictEqual(p, "Persona.");
+  });
+
+  await test("history: only the chat window may read, save or clear it", async () => {
+    const store = { Tamamo: [{ role: "user", content: "secret" }] };
+    const history = {
+      get: (m) => store[m] || [],
+      append: (m, msgs) => (store[m] = [...(store[m] || []), ...msgs]),
+      clear: (m) => delete store[m],
+    };
+    const settings = { get: () => ({ chat: {}, tts: {}, stt: {}, pet: {}, models: {} }) };
+    const origin = "http://127.0.0.1:5555";
+    registerIpc(settings, { getLoadedModel: () => "Tamamo", getOrigin: () => origin, history });
+    const from = (url) => ({ senderFrame: { url }, sender: { getURL: () => url } });
+    const chat = from(origin + "/chat/index.html");
+    const got = await handlers["history:get"](chat);
+    assert.deepStrictEqual(got, { model: "Tamamo", messages: [{ role: "user", content: "secret" }] });
+    for (const intruder of [
+      from(origin + "/renderer/index.html"), // the pet window
+      from(origin + "/chat/settings.html"), // Settings
+      from("http://127.0.0.1:6666/chat/index.html"), // right page, wrong origin
+      from("https://example.com/chat/index.html"),
+    ]) {
+      assert.throws(() => handlers["history:get"](intruder), /only available to the chat window/);
+      assert.throws(() => handlers["history:clear"](intruder, { model: "Tamamo" }), /only available/);
+    }
+    await handlers["history:append"](chat, { model: "Tamamo", messages: [{ role: "assistant", content: "hi" }] });
+    assert.strictEqual(store.Tamamo.length, 2);
+    await handlers["history:clear"](chat, { model: "Tamamo" });
+    assert.strictEqual(store.Tamamo, undefined);
   });
 
   console.log(`\n${passed} ipc tests passed`);

@@ -44,6 +44,7 @@
       "ipc.js",
       "server.js",
       "settings.js",
+      "history.js",
       "models.js",
       "extractContent.js",
       "speechText.js",

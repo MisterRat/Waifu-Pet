@@ -66,7 +66,10 @@ Behaviour (each part has an off switch in Settings):
 - She speaks up now and then, greets you at launch and welcomes you back after
   a long absence (needs the chat server).
 - Replies stream in and she starts speaking sentence by sentence.
-- 🗑 in the chat title bar clears the conversation (what she remembers and the log).
+- Each model remembers its own conversation, also after the chat window or the
+  app is closed; her greetings and remarks are part of it. She is sent the last
+  10 messages as context. 🗑 in the chat title bar clears the current model's
+  conversation (the others are kept).
 - Voice input in chat (turn on *Voice input* in Settings):
   - 🎤 push to talk: click, speak, click again.
   - 🗣 **conversation mode**: hands-free. Just talk; when you pause she
@@ -85,7 +88,9 @@ lists what the selected model ships and what will work (blinking, lip sync, eye
 and head following, idle motions, oversized textures).
 
 Settings live in `%APPDATA%\waifu-pet\settings.json`. API keys are encrypted
-with Windows DPAPI and only the Settings window can read them.
+with Windows DPAPI and only the Settings window can read them. Conversations are
+saved per model in `%APPDATA%\waifu-pet\chat-history.json` (the latest 200
+messages each); only the chat window can read them.
 
 ## Adding a model
 
@@ -142,6 +147,7 @@ stt.js             Built-in Whisper lifecycle (download, load, unload)
 stt-worker.js      Whisper worker process (Transformers.js)
 speechText.js      Strips [tags] so they are never spoken; filters words Whisper invents from noise
 settings.js        Settings store (atomic writes, encrypted API keys)
+history.js         Saved conversation per model
 models.js          Model discovery and the model health check
 server.js          Local static file server (whitelisted folders, loopback only)
 fullscreen.js      Fullscreen-app detection (Windows)
@@ -177,6 +183,10 @@ path against a local fake server.
   never reach the web pages.
 
 ## Licensing
+
+**The Tamamo model (`models/Tamamo/`) was commissioned by MisterRat, who owns
+all rights to it, including commercial rights. All rights reserved: it is not
+licensed for reuse, modification or redistribution outside this project.**
 
 The Live2D Cubism Core in `vendor/` is proprietary and subject to Live2D's
 license. Each model in `models/` is subject to its own license; only ship models

@@ -766,4 +766,57 @@ test("conversation: status line", () => {
   assert.strictEqual(s({ listenerState: "paused" }).text, "Paused");
 });
 
+// --- saved conversation per model (history.js) ---
+const { HistoryStore, MAX_MESSAGES } = require("../history");
+
+test("history: each model keeps its own conversation, across restarts", () => {
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), "wp-hist-"));
+  try {
+    const h = new HistoryStore(dir);
+    assert.deepStrictEqual(h.get("Tamamo"), [], "nothing saved yet");
+    h.append("Tamamo", [{ role: "user", content: "hi" }, { role: "assistant", content: "hello!" }]);
+    h.append("MeiLin", [{ role: "user", content: "hey Mei" }]);
+    // A restart reads it back from disk.
+    const h2 = new HistoryStore(dir);
+    assert.deepStrictEqual(h2.get("Tamamo").map((m) => m.content), ["hi", "hello!"]);
+    assert.deepStrictEqual(h2.get("MeiLin").map((m) => m.content), ["hey Mei"]);
+    // Clear forgets one model only.
+    h2.clear("Tamamo");
+    const h3 = new HistoryStore(dir);
+    assert.deepStrictEqual(h3.get("Tamamo"), []);
+    assert.strictEqual(h3.get("MeiLin").length, 1, "MeiLin's conversation is kept");
+  } finally {
+    fsx.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("history: junk is dropped, size is capped, a bad file starts empty", () => {
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), "wp-hist-"));
+  try {
+    const h = new HistoryStore(dir);
+    h.append("Tamamo", [
+      { role: "system", content: "no system prompts in history" },
+      { role: "user", content: "   " },
+      null,
+      { role: "assistant", content: "x".repeat(30000) },
+    ]);
+    assert.strictEqual(h.get("Tamamo").length, 1);
+    assert.strictEqual(h.get("Tamamo")[0].content.length, 20000);
+    const many = Array.from({ length: MAX_MESSAGES + 50 }, (_, i) => ({ role: "user", content: "m" + i }));
+    h.append("Tamamo", many);
+    const kept = h.get("Tamamo");
+    assert.strictEqual(kept.length, MAX_MESSAGES);
+    assert.strictEqual(kept[kept.length - 1].content, "m" + (MAX_MESSAGES + 49), "the newest are kept");
+    h.append("__proto__", [{ role: "user", content: "x" }]);
+    assert.deepStrictEqual(h.get("__proto__"), []);
+    h.get("Tamamo").push({ role: "user", content: "not saved" });
+    assert.strictEqual(h.get("Tamamo").length, MAX_MESSAGES, "get() returns a copy");
+    fsx.writeFileSync(pathx.join(dir, "chat-history.json"), "{not json");
+    fsx.rmSync(pathx.join(dir, "chat-history.json.bak"), { force: true });
+    assert.deepStrictEqual(new HistoryStore(dir).get("Tamamo"), [], "unreadable file: start empty, no crash");
+  } finally {
+    fsx.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 Promise.all(pending).then(() => console.log(`\n${passed} tests passed`));
