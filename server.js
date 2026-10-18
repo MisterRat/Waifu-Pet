@@ -26,6 +26,11 @@ const MIME = {
   ".wav": "audio/wav",
   ".ico": "image/x-icon",
   ".svg": "image/svg+xml",
+  // Conversation mode's voice detection (vendor/vad/): the ONNX runtime loads its
+  // .mjs glue as a module and compiles the .wasm, and both need the right type.
+  ".mjs": "text/javascript; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".onnx": "application/octet-stream",
 };
 
 // Folders (relative to rootDir) that may be served.

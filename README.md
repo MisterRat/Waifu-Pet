@@ -66,7 +66,12 @@ Behaviour (each part has an off switch in Settings):
 - She speaks up now and then, greets you at launch and welcomes you back after
   a long absence (needs the chat server).
 - Replies stream in and she starts speaking sentence by sentence.
-- Optional microphone button in chat (push to talk).
+- Voice input in chat (turn on *Voice input* in Settings):
+  - 🎤 push to talk: click, speak, click again.
+  - 🗣 **conversation mode**: hands-free. Just talk; when you pause she
+    answers. Voice detection (Silero, running locally) tells speech from noise,
+    and the microphone pauses while she is thinking or speaking so she never
+    answers herself. The status line above the input shows what it is doing.
 - She hides while a fullscreen game or video runs, stops drawing while hidden,
   and is capped at 30 fps by default.
 
@@ -143,9 +148,10 @@ proactive.js       Greetings / welcome-back / remark scheduler
 extractContent.js  Parsing of chat completion responses and SSE streams
 preload.js         Bridge between the windows and the main process
 renderer/          Pet window: pet.js, idle.js, expressions.js, tagParser.js, lipsync.js, debug.js
-chat/              Chat and Settings windows
+chat/              Chat and Settings windows (conversation.js: hands-free conversation mode)
 assets/            Tray icon and app icon (npm run icon generates icon.png)
-vendor/            Live2D Cubism Core, Pixi and the Live2D plugin (copied from node_modules by npm install)
+vendor/            Live2D Cubism Core, Pixi and the Live2D plugin; vendor/vad/ is the voice-detection
+                   runtime (all copied from node_modules by npm install; vad/ is not in git)
 models/            Bundled / dev models (one folder each; only Tamamo is in git, see .gitignore)
 build.bat          Builds dist\WaifuPet.exe
 start.bat          Installs dependencies if needed and runs the app

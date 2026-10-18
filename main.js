@@ -70,6 +70,7 @@ const MAX_SCALE = 1.5;
 
 let httpServer = null;
 let port = 0;
+let petSpeaking = false; // reported by the pet window; used by conversation mode
 let settings = null;
 let petWin = null;
 let chatWin = null;
@@ -296,6 +297,11 @@ function createPetWindow(pos) {
   petWin.on("hide", () => winRef.webContents.send("pet:visible", false));
   petWin.on("closed", () => {
     if (petWin === winRef) petWin = null;
+    // Closed mid-sentence (e.g. switching models): she isn't speaking any more.
+    if (petSpeaking) {
+      petSpeaking = false;
+      if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", false);
+    }
   });
 }
 
@@ -328,6 +334,10 @@ function createChatWindow() {
   hardenWindow(chatWin);
   chatWin.setAlwaysOnTop(alwaysOnTop, "floating");
   chatWin.loadURL(`http://127.0.0.1:${port}/chat/index.html`);
+  // Opened while she is mid-sentence: tell it, so conversation mode waits.
+  chatWin.webContents.once("did-finish-load", () => {
+    if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
+  });
   chatWin.on("closed", () => (chatWin = null));
 }
 
@@ -641,6 +651,14 @@ function registerWindowIpc() {
   });
   ipcMain.on("settings:close", (e) => {
     if (fromSettingsWin(e)) settingsWin.close();
+  });
+
+  // The pet reports when she starts/stops speaking; the chat window pauses
+  // conversation-mode listening meanwhile so she never hears herself.
+  ipcMain.on("pet:speaking", (e, speaking) => {
+    if (!fromPet(e)) return;
+    petSpeaking = Boolean(speaking);
+    if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
   });
 
   // Chat window asks main to push a line to the pet's speech bubble.

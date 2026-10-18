@@ -895,6 +895,16 @@
     return speech.playing || speech.queue.length > 0 || now < talkingUntil;
   }
 
+  // Tell the chat window when her voice starts and stops (audio playing or a
+  // sentence still queued), so conversation mode never listens to her.
+  let reportedSpeaking = false;
+  setInterval(() => {
+    const speaking = speech.playing || speech.queue.length > 0;
+    if (speaking === reportedSpeaking) return;
+    reportedSpeaking = speaking;
+    if (window.pet.setSpeaking) window.pet.setSpeaking(speaking);
+  }, 100);
+
   function stopCurrentSpeech() {
     const cur = speech.current;
     if (!cur) return;

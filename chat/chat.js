@@ -8,6 +8,7 @@ const input = $("input");
 const sendBtn = $("send");
 const speakBtn = $("speak");
 const micBtn = $("mic");
+const talkBtn = $("talk");
 
 let history = []; // [{role, content}]
 let systemPrompt = "You are a cheerful anime desktop pet.";
@@ -30,6 +31,8 @@ async function refreshPrompt() {
     vocab = v || vocab;
     systemPrompt = p || systemPrompt;
     micBtn.hidden = !(s.stt && s.stt.enabled);
+    talkBtn.hidden = micBtn.hidden;
+    if (talkBtn.hidden && conv.on) stopConversation();
     if (vocab.name) {
       $("petName").textContent = vocab.name;
       input.placeholder = "Say something to " + vocab.name + "…";
@@ -151,19 +154,23 @@ async function streamReply(apiMessages, bubble) {
   });
 }
 
-async function send() {
+/** @param {string} [spoken] text from conversation mode (the input box is left alone) */
+async function send(spoken) {
+  const fromVoice = typeof spoken === "string";
   if (busy) {
-    // The button doubles as "Stop" while a reply is streaming.
-    if (current) current.cancel();
+    // The button doubles as "Stop" while a reply is streaming. A sentence
+    // heard in conversation mode never stops her.
+    if (!fromVoice && current) current.cancel();
     return;
   }
-  const text = input.value.trim();
+  const text = fromVoice ? spoken.trim() : input.value.trim();
   if (!text) return;
-  input.value = "";
+  if (!fromVoice) input.value = "";
   addMsg("user", text);
   history.push({ role: "user", content: text });
 
   busy = true;
+  convUpdate();
   sendBtn.textContent = "Stop";
   const bubble = addMsg("assistant", "…");
   try {
@@ -188,12 +195,13 @@ async function send() {
   } finally {
     current = null;
     busy = false;
+    convUpdate();
     sendBtn.textContent = "Send";
-    input.focus();
+    if (!fromVoice) input.focus();
   }
 }
 
-sendBtn.addEventListener("click", send);
+sendBtn.addEventListener("click", () => send());
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") send();
 });
@@ -249,17 +257,26 @@ async function transcribe(blob) {
   }
 }
 
-// Reflect the built-in Whisper's state on the mic button.
+// Reflect the built-in Whisper's state on the mic and conversation buttons.
+let sttReady = false;
 function showSttStatus(st) {
   if (!st) return;
   const ready = st.state === "ready";
-  micBtn.disabled = !ready;
-  micBtn.title =
-    ready ? "Voice input"
+  sttReady = ready;
+  const why =
+    ready ? ""
     : st.state === "downloading" ? `Downloading Whisper… ${st.percent}%`
     : st.state === "loading" ? "Loading Whisper…"
     : st.state === "error" ? "Whisper error: " + st.message
     : "Voice input is turned off";
+  micBtn.disabled = !ready || conv.on;
+  micBtn.title = ready ? (conv.on ? "Turn conversation mode off to use push-to-talk" : "Voice input") : why;
+  talkBtn.disabled = !ready && !conv.on;
+  talkBtn.title = ready || conv.on ? talkTitle() : why;
+  if (!ready && conv.on) {
+    stopConversation();
+    if (st.state === "error" || st.state === "off") addMsg("sys", "Conversation mode stopped: " + why);
+  }
 }
 window.pet.onSttStatus(showSttStatus);
 window.pet.sttStatus().then(showSttStatus).catch(() => {});
@@ -291,6 +308,145 @@ micBtn.addEventListener("click", async () => {
     addMsg("sys", "Microphone unavailable: " + ((e && e.message) || e));
   }
 });
+
+// --- Conversation mode (hands-free) ---
+// Silero voice detection notices when you start and stop talking; each sentence
+// goes to Whisper and is sent like a typed message. Listening pauses while she
+// is thinking or speaking and resumes shortly after, so she never answers her
+// own voice. Lives only while the chat window is open.
+const conv = {
+  on: false,
+  listener: null,
+  gate: null,
+  listenerState: null,
+  petSpeaking: false,
+  transcribing: false,
+};
+const talkTitle = () =>
+  conv.on ? "Stop conversation mode" : "Conversation mode: just talk, she answers when you pause";
+
+function convBusy() {
+  return busy || conv.petSpeaking || conv.transcribing || document.visibilityState === "hidden";
+}
+
+function showConvStatus() {
+  const box = $("convStatus");
+  box.hidden = !conv.on;
+  if (!conv.on) return;
+  const s = window.WaifuConversation.statusLabel(
+    { petSpeaking: conv.petSpeaking, thinking: busy, transcribing: conv.transcribing, listenerState: conv.listenerState },
+    vocab.name
+  );
+  box.className = s.kind;
+  $("convText").textContent = s.text;
+}
+
+// Re-check whether we should be listening; called whenever a busy signal changes.
+function convUpdate() {
+  if (conv.on && conv.gate) conv.gate.update(convBusy());
+  showConvStatus();
+}
+
+// The voice-detection scripts load the first time conversation mode is switched on.
+let vadScripts = null;
+function loadVadScripts() {
+  if (window.vad && window.vad.MicVAD) return Promise.resolve();
+  if (!vadScripts) {
+    const load = (src) =>
+      new Promise((resolve, reject) => {
+        const el = document.createElement("script");
+        el.src = src;
+        el.onload = resolve;
+        el.onerror = () => reject(new Error("voice detection files are missing (run npm install)"));
+        document.head.appendChild(el);
+      });
+    vadScripts = load("../vendor/vad/ort.wasm.min.js").then(() => load("../vendor/vad/bundle.min.js"));
+    vadScripts.catch(() => (vadScripts = null));
+  }
+  return vadScripts;
+}
+
+async function transcribeUtterance(audio) {
+  if (!conv.on || convBusy()) return;
+  conv.transcribing = true;
+  convUpdate();
+  try {
+    const { text } = await window.pet.sttTranscribe(audio);
+    if (conv.on && text) await send(text);
+  } catch (e) {
+    // Noise Whisper turned into nothing is normal here; anything else is shown.
+    const msg = (e && e.message) || String(e);
+    if (!/no speech/i.test(msg)) addMsg("sys", "⚠ " + msg);
+  } finally {
+    conv.transcribing = false;
+    convUpdate();
+  }
+}
+
+function stopConversation() {
+  if (conv.gate) conv.gate.stop();
+  if (conv.listener) conv.listener.destroy();
+  conv.on = false;
+  conv.listener = null;
+  conv.gate = null;
+  conv.listenerState = null;
+  talkBtn.classList.remove("on");
+  talkBtn.setAttribute("aria-pressed", "false");
+  talkBtn.title = talkTitle();
+  talkBtn.disabled = !sttReady;
+  micBtn.disabled = !sttReady;
+  showConvStatus();
+}
+
+async function startConversation() {
+  if (recorder) recorder.stop(); // finish any push-to-talk first
+  conv.on = true;
+  talkBtn.classList.add("on");
+  talkBtn.setAttribute("aria-pressed", "true");
+  talkBtn.title = talkTitle();
+  micBtn.disabled = true;
+  conv.listenerState = "starting";
+  showConvStatus();
+  try {
+    await loadVadScripts();
+    const listener = await window.WaifuConversation.createConversationListener({
+      onUtterance: (audio) => void transcribeUtterance(audio),
+      onState: (state) => {
+        conv.listenerState = state;
+        showConvStatus();
+      },
+    });
+    if (!conv.on) {
+      listener.destroy(); // switched off while it was starting
+      return;
+    }
+    conv.listener = listener;
+    conv.gate = new window.WaifuConversation.HalfDuplexGate({
+      pause: () => listener.pause().catch(() => {}),
+      resume: () => listener.resume().catch((e) => {
+        addMsg("sys", "⚠ Microphone: " + ((e && e.message) || e));
+        stopConversation();
+      }),
+    });
+    convUpdate();
+  } catch (e) {
+    stopConversation();
+    addMsg("sys", "⚠ Conversation mode could not start: " + ((e && e.message) || e) + ". Check the microphone.");
+  }
+}
+
+talkBtn.addEventListener("click", () => {
+  if (conv.on) stopConversation();
+  else startConversation();
+});
+
+// The pet window reports when she starts and stops speaking.
+window.pet.onPetSpeaking((speaking) => {
+  conv.petSpeaking = Boolean(speaking);
+  convUpdate();
+});
+document.addEventListener("visibilitychange", convUpdate);
+window.addEventListener("beforeunload", () => conv.listener && conv.listener.destroy());
 
 // An unprompted line from the pet (greeting, remark): show it in the log and
 // remember it as part of the conversation.
