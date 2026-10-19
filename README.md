@@ -10,6 +10,8 @@ The app is **model-agnostic**. Every folder in `models/` that contains a
 `*.model3.json` shows up as a choice in Settings; nothing in the code depends
 on a particular model. Tamamo is bundled and is the default.
 
+![Waifu Pet: Tamamo on the desktop next to her chat window](docs/screenshot.png)
+
 ## Download
 
 Ready-built `WaifuPet.exe` files are on the repo's **Releases** page. GitHub
