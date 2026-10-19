@@ -2,7 +2,8 @@
 // so the app (and the packaged .exe) loads them from there and does not have to
 // carry node_modules. Runs automatically after `npm install`.
 //
-//   vendor/pixi.min.js, vendor/cubism4.min.js   pet window (committed to git)
+//   vendor/pixi.min.js, vendor/pixi-unsafe-eval.min.js,
+//   vendor/cubism4.min.js                        pet window (committed to git)
 //   vendor/vad/                                  conversation mode's voice detection
 //                                                (generated here, git-ignored; about 17 MB)
 "use strict";
@@ -40,6 +41,8 @@ const ortDir = ortDirFor(vadDir);
 
 const FILES = [
   ["node_modules/pixi.js/dist/pixi.min.js", "vendor/pixi.min.js"],
+  // Lets Pixi run without eval, so the pet page can use a strict Content-Security-Policy.
+  ["node_modules/@pixi/unsafe-eval/dist/unsafe-eval.min.js", "vendor/pixi-unsafe-eval.min.js"],
   ["node_modules/pixi-live2d-display/dist/cubism4.min.js", "vendor/cubism4.min.js"],
 ];
 const VAD_FILES = [

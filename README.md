@@ -181,6 +181,10 @@ path against a local fake server.
   microphone capture for the chat window.
 - Chat and TTS requests are made by the main process, so API keys
   never reach the web pages.
+- Every page has a strict Content-Security-Policy: only the app's own files
+  may load or run, with no inline scripts, no `eval` and nothing from the
+  internet. WebAssembly is allowed for the Live2D core and voice detection,
+  and Pixi runs without `eval` through `@pixi/unsafe-eval`.
 
 ## Licensing
 

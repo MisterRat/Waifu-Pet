@@ -2,6 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <!-- Content-Security-Policy. Only this app's own files may load or run: no inline scripts, nothing from
+       the internet. All network calls (chat, TTS) are made by the main process. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'" />
   <title>Waifu Pet Settings</title>
   <style>
     :root {

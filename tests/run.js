@@ -819,4 +819,29 @@ test("history: junk is dropped, size is capped, a bad file starts empty", () => 
   }
 });
 
+// --- Content-Security-Policy on every page (code review round 2) ---
+test("csp: every page has a strict policy and no inline scripts", () => {
+  const pages = ["renderer/index.html", "chat/index.html", "chat/settings.html"];
+  for (const page of pages) {
+    const html = fsx.readFileSync(pathx.join(__dirname, "..", page), "utf8");
+    const m = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
+    assert.ok(m, page + " has a CSP meta tag");
+    const csp = Object.fromEntries(m[1].split(";").map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
+    assert.deepStrictEqual(csp["default-src"], ["'self'"], page + ": default-src 'self'");
+    assert.deepStrictEqual(csp["object-src"], ["'none'"], page);
+    assert.ok(csp["script-src"].includes("'self'"), page);
+    for (const bad of ["'unsafe-inline'", "'unsafe-eval'", "*", "http:", "https:", "data:"]) {
+      assert.ok(!csp["script-src"].includes(bad), `${page}: script-src must not allow ${bad}`);
+    }
+    assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(html), page + ": no inline <script>");
+    assert.ok(!/\son[a-z]+="/.test(html), page + ": no inline event handlers");
+    // The CSP must come before any script so it applies to all of them.
+    assert.ok(html.indexOf("Content-Security-Policy") < html.indexOf("<script"), page + ": CSP before scripts");
+  }
+  // Pixi needs its no-eval add-on, loaded right after Pixi itself.
+  const pet = fsx.readFileSync(pathx.join(__dirname, "..", "renderer/index.html"), "utf8");
+  const a = pet.indexOf("vendor/pixi.min.js"), b = pet.indexOf("vendor/pixi-unsafe-eval.min.js"), c = pet.indexOf("vendor/cubism4.min.js");
+  assert.ok(a > -1 && a < b && b < c, "pixi, then its no-eval add-on, then the Live2D plugin");
+});
+
 Promise.all(pending).then(() => console.log(`\n${passed} tests passed`));
