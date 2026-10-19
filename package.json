@@ -2,7 +2,7 @@
   "name": "waifu-pet",
   "version": "1.0.0",
   "description": "Live2D desktop pet with OpenAI-compatible chat, voice and proactive companionship",
-  "author": "Waifu Pet",
+  "author": "MisterRat",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "main": "main.js",
@@ -25,6 +25,7 @@
     "protobufjs": false
   },
   "devDependencies": {
+    "@pixi/unsafe-eval": "5.3.12",
     "@ricky0123/vad-web": "^0.0.29",
     "electron": "^44.5.1",
     "electron-builder": "^26.0.0",
