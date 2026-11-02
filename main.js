@@ -173,6 +173,32 @@ function placePet(x, y) {
   const { width, height } = petSize(settings.get().pet.scale);
   const p = clampToDesktop(Math.round(x), Math.round(y), width, height);
   petWin.setBounds({ x: p.x, y: p.y, width, height });
+  savePetPosition();
+}
+
+// Remember where she is, so she comes back to the same spot next launch.
+// Dragging moves her many times a second, so the save waits until she stops.
+let savePosTimer = null;
+function savePetPosition(now = false) {
+  clearTimeout(savePosTimer);
+  const save = () => {
+    savePosTimer = null;
+    if (!petWin || petWin.isDestroyed()) return;
+    const [x, y] = petWin.getPosition();
+    const old = settings.get().pet.position;
+    if (old && old.x === x && old.y === y) return;
+    settings.update({ pet: { position: { x, y } } });
+  };
+  if (now) save();
+  else savePosTimer = setTimeout(save, 600);
+}
+
+/** The saved position, kept on the desktop (a monitor may have been unplugged since); null if none. */
+function savedPetPosition() {
+  const pos = settings.get().pet.position;
+  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return null;
+  const { width, height } = petSize(settings.get().pet.scale);
+  return clampToDesktop(Math.round(pos.x), Math.round(pos.y), width, height);
 }
 
 // Lock a window to our own local origin and deny popups/webviews.
@@ -552,6 +578,7 @@ function applyScale(s) {
   const p = clampToDesktop(Math.round(cx - width / 2), Math.round(cy - height / 2), width, height);
   petWin.setBounds({ x: p.x, y: p.y, width, height });
   petWin.webContents.send("pet:scale", scale);
+  savePetPosition();
 }
 
 // Built-in Whisper. Runs in its own process so turning it off frees the memory.
@@ -767,7 +794,8 @@ if (!gotLock) {
     // deskpet (and other working transparent pets) wait ~50ms.
     setTimeout(() => {
       try {
-        createPetWindow();
+        // Back where she was last time (or the bottom-right corner on first run).
+        createPetWindow(savedPetPosition() || undefined);
         console.log("[main] pet window created");
       } catch (err) {
         console.error("[main] pet window creation failed:", err);
@@ -789,6 +817,7 @@ if (!gotLock) {
   // Electron doesn't wait for an async before-quit handler, so shut things down
   // synchronously; the local server's sockets close with the process.
   app.on("before-quit", () => {
+    if (savePosTimer) savePetPosition(true); // a drag that ended just before quitting
     if (cursorTimer) clearInterval(cursorTimer);
     if (proactive) proactive.stop();
     if (fullscreenWatcher) fullscreenWatcher.stop();
