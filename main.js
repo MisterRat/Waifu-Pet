@@ -428,7 +428,7 @@ function buildTray() {
     icon = nativeImage.createFromDataURL(FALLBACK_TRAY_PNG);
   }
   tray = new Tray(icon);
-  tray.setToolTip("Waifu Pet");
+  tray.setToolTip("Waifu Pet " + app.getVersion());
   buildTrayMenu();
   tray.on("click", () => raiseVisibleWindows());
   if (process.platform === "win32") {
@@ -474,6 +474,7 @@ function makeTrayMenu() {
     { label: "Settings", click: () => createSettingsWindow() },
     { label: "Open Models Folder", click: () => shell.openPath(userModelsFolder()) },
     { type: "separator" },
+    { label: "Version " + app.getVersion(), enabled: false },
     { label: "Quit", click: () => app.quit() },
   ]);
   return menu;
@@ -670,6 +671,9 @@ function registerWindowIpc() {
     petSpeaking = Boolean(speaking);
     if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
   });
+
+  // The app's version (package.json), shown in Settings.
+  ipcMain.handle("app:version", () => app.getVersion());
 
   // Copy button on a code block in the chat window.
   ipcMain.on("clipboard:write-text", (e, text) => {

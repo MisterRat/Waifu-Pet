@@ -14,12 +14,20 @@ on a particular model. Tamamo is bundled and is the default.
 
 ## Download
 
-Ready-built `WaifuPet.exe` files are on the repo's **Releases** page. GitHub
-builds one each night when something new has been merged into `main`; the
+Ready-built `WaifuPet.exe` files are on the repo's **Releases** page, named
+after their version. GitHub builds one each night when something new has been merged into `main`; the
 **Run workflow** button on the Actions tab (*Build Windows exe*) builds one on
 demand. The exe includes the Tamamo model; put any other model folder into a
 `models` folder next to the exe. It isn't code-signed, so Windows SmartScreen
 may ask you to confirm the first time (**More info → Run anyway**).
+
+## Versions
+
+The version is in `package.json` and shows in the tray (tooltip and menu) and
+under the logo in Settings. The minor number goes up with every change pushed
+(2.2, 2.3, …); the major number is raised by the owner. A pull request whose
+version isn't higher than `main`'s fails its check. Releases are named after
+the version (`v2.2.0`).
 
 ## Run
 

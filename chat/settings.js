@@ -69,6 +69,12 @@ async function reloadModelOverrides() {
   }
 }
 
+// Version under the logo (package.json; minor goes up with every change pushed).
+window.pet
+  .appVersion()
+  .then((v) => ($("appVersion").textContent = "Version " + v))
+  .catch(() => {});
+
 window.pet
   .settingsGet()
   .then(async (s) => {
