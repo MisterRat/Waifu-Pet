@@ -65,7 +65,9 @@ Windows SmartScreen may warn the first time ("More info" → "Run anyway").
 | Right-drag | Move the model up/down inside the window |
 | Tray → Chat | Open the chat window |
 
-Zoom and position are remembered **per model**.
+Zoom and position are remembered **per model**. Where she sits on the desktop
+is remembered too: she comes back to the same spot when the app starts (moved
+onto the nearest screen if that monitor is gone).
 
 Behaviour (each part has an off switch in Settings):
 

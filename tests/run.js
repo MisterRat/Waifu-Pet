@@ -279,6 +279,18 @@ test("lip sync: leaves the face's mouth alone while she is silent", () => {
 // --- settings: per-model overrides ---
 const { modelOverride } = require("../settings.js");
 
+test("settings: the pet's screen position is saved and survives a restart", () => {
+  const { SettingsStore } = require("../settings.js");
+  const dir = require("fs").mkdtempSync(path.join(require("os").tmpdir(), "wp-pos-"));
+  const a = new SettingsStore(dir);
+  assert.strictEqual(a.get().pet.position, null, "no position until she is moved");
+  a.update({ pet: { position: { x: -1500, y: 220 } } }); // a monitor left of the main one
+  a.update({ pet: { scale: 1.25 } }); // other pet settings leave it alone
+  const b = new SettingsStore(dir);
+  assert.deepStrictEqual(b.get().pet.position, { x: -1500, y: 220 });
+  assert.strictEqual(b.get().pet.scale, 1.25);
+});
+
 test("modelOverride: returns non-empty override", () => {
   const models = { ModelA: { systemPrompt: "You are a test persona.", voice: "af" } };
   assert.strictEqual(modelOverride(models, "ModelA", "systemPrompt"), "You are a test persona.");
