@@ -226,12 +226,14 @@ function tagInstructions(v) {
 }
 
 // Code is shown in the chat window but never read aloud (see codeSegments in
-// renderer/tagParser.js), so the LLM must put it in fenced blocks.
+// renderer/tagParser.js), so the LLM must wrap it in our own container tags.
 const CODE_INSTRUCTIONS =
-  "\n\nWhen you give code, commands, file contents or anything else meant to be copied, put it in a " +
-  "Markdown code block fenced with three backticks (```). Code blocks are shown on screen but are " +
-  "never read aloud, so introduce the code in a short spoken sentence and don't read it out, spell it " +
-  "out or describe it line by line.";
+  "\n\nWhen you give code, commands, file contents or anything else meant to be copied, put it " +
+  "between [waifucode] and [/waifucode], with nothing else inside, for example:\n" +
+  "[waifucode]\nprint(\"hello\")\n[/waifucode]\n" +
+  "Everything between those tags is shown on screen but never read aloud, so introduce the code in " +
+  "a short spoken sentence and don't read it out, spell it out or describe it line by line. " +
+  "Never use Markdown code fences or backticks.";
 
 /** Full system prompt for a model: persona (per-model override or global) + its tags + code rule. */
 function buildSystemPrompt(cfg, modelName) {

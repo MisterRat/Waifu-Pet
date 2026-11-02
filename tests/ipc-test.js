@@ -133,10 +133,11 @@ const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: te
     // The bundled models folder is used if present; with no match it is the persona and the code rule.
     const p = buildSystemPrompt(cfg, "no-such-model");
     assert.strictEqual(p, "Persona." + CODE_INSTRUCTIONS);
-    assert.match(CODE_INSTRUCTIONS, /```/);
+    assert.match(CODE_INSTRUCTIONS, /\[waifucode\][\s\S]*\[\/waifucode\]/);
+    assert.match(CODE_INSTRUCTIONS, /Never use Markdown code fences or backticks/);
     assert.match(CODE_INSTRUCTIONS, /never read aloud/);
     const t = buildSystemPrompt(cfg, "Tamamo");
-    assert.ok(t.indexOf("[happy]") > 0 && t.indexOf("[happy]") < t.indexOf("```"), "tags first, then the code rule");
+    assert.ok(t.indexOf("[happy]") > 0 && t.indexOf("[happy]") < t.indexOf("[waifucode]"), "tags first, then the code rule");
   });
 
   await test("history: only the chat window may read, save or clear it", async () => {

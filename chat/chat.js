@@ -54,14 +54,14 @@ function displayText(raw) {
   return window.WaifuTagParser.stripAnyTags(parsed.cleanText);
 }
 
-/** A code block: monospace, whitespace kept, a Copy button. Shown, never spoken. */
+/** A [waifucode] block: monospace, whitespace kept, a Copy button. Shown, never spoken. */
 function codeBlock(seg) {
   const box = document.createElement("div");
   box.className = "code";
   const head = document.createElement("div");
   head.className = "code-head";
   const label = document.createElement("span");
-  label.textContent = (seg.lang || "code") + (seg.open ? " …" : "");
+  label.textContent = "code" + (seg.open ? " …" : "");
   const copy = document.createElement("button");
   copy.textContent = "Copy";
   copy.title = "Copy the code";
@@ -86,24 +86,18 @@ function codeBlock(seg) {
 function renderReply(el, raw) {
   el.textContent = "";
   let hasCode = false;
-  for (const seg of TP.codeSegments(raw)) {
+  const segs = TP.codeSegments(raw);
+  for (const [i, seg] of segs.entries()) {
     if (seg.type === "code") {
       hasCode = true;
       el.appendChild(codeBlock(seg));
     } else {
-      const t = displayText(seg.text);
+      // A "[/waifu" still streaming in at the very end is hidden until it completes.
+      const text = i === segs.length - 1 ? seg.text.replace(/\[\/[a-z]*$/i, "") : seg.text;
+      const t = displayText(text);
       if (!t) continue;
-      // Inline `code` is shown in monospace (and spoken without the backticks).
       const line = document.createElement("div");
-      t.split(/`([^`]+)`/).forEach((part, i) => {
-        if (!part) return;
-        if (i % 2) {
-          const c = document.createElement("code");
-          c.className = "inline";
-          c.textContent = part;
-          line.appendChild(c);
-        } else line.appendChild(document.createTextNode(part));
-      });
+      line.textContent = t;
       el.appendChild(line);
     }
   }
@@ -148,10 +142,10 @@ async function streamReply(apiMessages, bubble) {
     let sentenceCount = 0;
     let cancelled = false;
 
-    // Only the text outside code blocks is spoken; a code block ends a
-    // sentence, and nothing after an unclosed fence is spoken until it closes.
+    // Only the text outside [waifucode] blocks is spoken; a code block ends a
+    // sentence, and nothing after an unclosed [waifucode] is spoken until it closes.
     const flush = (final) => {
-      const speakable = TP.speakableStream(acc);
+      const speakable = TP.speakableStream(acc, final);
       const { sentences, rest } = TP.takeSentences(speakable.slice(sent), final);
       for (const text of sentences) {
         window.pet.pushLine({ text, speak: speakOn && !state.silenced, append: sentenceCount > 0 });

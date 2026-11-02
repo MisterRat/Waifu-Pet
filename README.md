@@ -71,8 +71,9 @@ Behaviour (each part has an off switch in Settings):
 - ⏹ in the chat title bar stops her talking at once. A reply that is still
   coming in keeps appearing in the chat, but she doesn't speak the rest of it.
 - Code is shown, never read aloud: she is told to put code, commands and file
-  contents in ``` code blocks, which appear in the chat in monospace with a
-  **Copy** button and are left out of her speech.
+  contents between `[waifucode]` and `[/waifucode]`. Those blocks appear in the
+  chat in monospace with a **Copy** button and are left out of her speech.
+  (Markdown backticks are not used for this.)
 - Each model remembers its own conversation, also after the chat window or the
   app is closed; her greetings and remarks are part of it. She is sent the last
   10 messages as context. 🗑 in the chat title bar clears the current model's
