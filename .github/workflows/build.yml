@@ -5,8 +5,12 @@
 #   commits are skipped.
 # - "Run workflow" button (Actions tab): build and publish now, even if nothing
 #   changed.
-# - Pull requests: run the tests and a full build to prove the PR still builds.
+# - Pull requests: run the tests and a full build to prove the PR still builds,
+#   and check that package.json's version is higher than main's (the minor
+#   number goes up with every change; the owner sets the major number).
 #   Nothing is published; the exe is kept for a few days as a run artifact.
+#
+# Releases are named after the version in package.json ("v2.2.0").
 #
 # Only models in the repo (Tamamo) are bundled. Other models go in a "models"
 # folder next to the exe.
@@ -27,6 +31,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  version:
+    name: Version raised?
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare package.json version with main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          ver() { gh api "repos/$REPO/contents/package.json?ref=$1" --jq .content | base64 -d | jq -r .version; }
+          base=$(ver "$BASE"); head=$(ver "$HEAD")
+          echo "main: $base  this PR: $head"
+          higher=$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)
+          if [ "$head" = "$base" ] || [ "$higher" != "$head" ]; then
+            echo "::error file=package.json::Version $head must be higher than main's $base (raise the minor number)."
+            exit 1
+          fi
+
   check:
     name: Anything new since the last release?
     runs-on: ubuntu-latest
@@ -104,6 +129,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v8
         with:
           name: WaifuPet-${{ github.sha }}
@@ -114,16 +144,23 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
+          version=$(jq -r .version package.json)
           day=$(TZ=America/Chicago date +%Y-%m-%d)
-          tag="build-$day-${SHA::7}"
+          tag="v$version"
+          # A version already released from a different commit (main changed
+          # without a version bump) gets the commit added to its tag.
           if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
-            # Same commit already released today (a second manual run): refresh the exe.
+            tag_sha=$(gh api "repos/$REPO/commits/$tag" --jq .sha 2>/dev/null || true)
+            [ "$tag_sha" = "$SHA" ] || tag="v$version-${SHA::7}"
+          fi
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+            # Same commit already released (a second manual run): refresh the exe.
             gh release upload "$tag" WaifuPet.exe --repo "$REPO" --clobber
           else
             gh release create "$tag" WaifuPet.exe \
               --repo "$REPO" \
               --target "$SHA" \
-              --title "Waifu Pet $day" \
+              --title "Waifu Pet $version ($day)" \
               --generate-notes \
               --latest
           fi
