@@ -699,6 +699,19 @@ function registerWindowIpc() {
     if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
   });
 
+  // Settings → Test page: play one face or motion on the pet now.
+  ipcMain.on("pet:test-play", (e, p) => {
+    if (!fromSettingsWin(e) || !p || !petWin || petWin.isDestroyed()) return;
+    const kind = ["emotion", "motion", "idle"].includes(p.kind) ? p.kind : null;
+    const name = typeof p.name === "string" ? p.name.slice(0, 80) : "";
+    if (kind && name) petWin.webContents.send("pet:play", { kind, name });
+  });
+
+  // Right-click on the pet: the same menu as the tray icon.
+  ipcMain.on("pet:context-menu", (e) => {
+    if (fromPet(e)) makeTrayMenu().popup({ window: petWin });
+  });
+
   // The app's version (package.json), shown in Settings.
   ipcMain.handle("app:version", () => app.getVersion());
 

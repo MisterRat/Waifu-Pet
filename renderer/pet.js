@@ -305,6 +305,14 @@
     await mm.startMotion(REACTION_GROUP, idx, PIXI.live2d.MotionPriority.NORMAL);
   }
 
+  // Settings → Test: play one idle loop by name (Idle_Sway -> "idle_sway").
+  async function playIdleNamed(name) {
+    const i = IDLE_MOTIONS.findIndex((f) => baseOf(f).toLowerCase() === String(name).toLowerCase());
+    if (i < 0) return;
+    idleIndex = i;
+    await mm.startMotion(IDLE_GROUP, i, PIXI.live2d.MotionPriority.FORCE);
+  }
+
   mm.definitions = {
     [IDLE_GROUP]: IDLE_MOTIONS.map((File) => ({ File })),
     [REACTION_GROUP]: Object.values(MOTION_MAP).map((File) => ({ File })),
@@ -724,6 +732,15 @@
   let glance = null; // {x, y, until}
   let lastInteractionAt = performance.now(); // click / drag / chat line
 
+  // Settings → Test page: play exactly what was clicked, the same way a chat tag would.
+  window.pet.onPlay(({ kind, name }) => {
+    lastInteractionAt = performance.now();
+    if (kind === "emotion") playExpression(name);
+    else if (kind === "motion") playReaction(name);
+    else if (kind === "idle") playIdleNamed(name);
+  });
+
+
   const clamp1 = (v) => Math.max(-1, Math.min(1, v));
   function gazeFor(cx, cy, rangeX, rangeY) {
     const { mh } = modelSize();
@@ -849,9 +866,11 @@
     lastInteractionAt = performance.now();
     if (wasDrag && wasModelDrag) scheduleSaveFraming();
     if (!wasDrag && e.button === 0) poke();
+    // A right-click (no drag) opens the tray icon's menu; right-drag still moves the model.
+    if (!wasDrag && e.button === 2) window.pet.showMenu();
   });
 
-  // Right-drag repositions the model; suppress the context menu.
+  // The browser's own context menu never shows (right-click opens ours, above).
   window.addEventListener("contextmenu", (e) => e.preventDefault());
 
   // Clicking outside the window ends the drag without a poke.
