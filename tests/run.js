@@ -551,7 +551,7 @@ test("speechText: unknown [tags] are never spoken, real brackets survive", () =>
 
 // ---- code blocks: shown in chat, never spoken ----
 const REPLY_WITH_CODE =
-  "Here's the script you asked for: [happy]\n```python\nfor i in range(3):\n    print(arr[i])\n```\nRun it with `python x.py`. Have fun!";
+  "Here's the script you asked for: [happy]\n[waifucode]\nfor i in range(3):\n    print(arr[i])\n[/waifucode]\nSave it as loop.py and run it. Have fun!";
 
 test("code: a reply splits into text and code, whitespace and [brackets] in code kept", () => {
   const segs = TP.codeSegments(REPLY_WITH_CODE);
@@ -559,29 +559,32 @@ test("code: a reply splits into text and code, whitespace and [brackets] in code
     segs.map((s) => s.type),
     ["text", "code", "text"]
   );
-  assert.strictEqual(segs[1].lang, "python");
   assert.strictEqual(segs[1].code, "for i in range(3):\n    print(arr[i])");
   assert.strictEqual(segs[1].open, false);
-  // Half-streamed: an unclosed fence is code until it closes.
-  const open = TP.codeSegments("Sure:\n```js\nconst x = 1;");
-  assert.deepStrictEqual(open[1], { type: "code", code: "const x = 1;", lang: "js", open: true });
-  // A fence with no language, and code written on the fence line.
-  assert.strictEqual(TP.codeSegments("```\nls -la\n```")[0].code, "ls -la");
-  assert.strictEqual(TP.codeSegments("```npm run dist```")[0].code, "npm run dist");
+  // Half-streamed: an unclosed [waifucode] is code until it closes.
+  assert.deepStrictEqual(TP.codeSegments("Sure:\n[waifucode]\nconst x = 1;")[1], { type: "code", code: "const x = 1;", open: true });
+  // On one line, any letter case; a stray closer is dropped.
+  assert.strictEqual(TP.codeSegments("[WaifuCode]npm run dist[/WAIFUCODE]")[0].code, "npm run dist");
+  assert.deepStrictEqual(TP.codeSegments("done[/waifucode] ok"), [{ type: "text", text: "done ok" }]);
+  // Backticks mean nothing special.
+  assert.deepStrictEqual(TP.codeSegments("a ```b``` c"), [{ type: "text", text: "a ```b``` c" }]);
 });
 
 test("code: never spoken, whole or streamed a character at a time", () => {
-  assert.strictEqual(TP.stripCode(REPLY_WITH_CODE), "Here's the script you asked for: [happy] Run it with python x.py. Have fun!");
-  assert.strictEqual(stripTags(REPLY_WITH_CODE), "Here's the script you asked for: Run it with python x.py. Have fun!");
-  assert.strictEqual(stripTags("Look:\n```\nsecret()"), "Look:"); // cut off mid-block
-  // Simulate the chat window's streaming loop.
+  assert.strictEqual(TP.stripCode(REPLY_WITH_CODE), "Here's the script you asked for: [happy] Save it as loop.py and run it. Have fun!");
+  assert.strictEqual(stripTags(REPLY_WITH_CODE), "Here's the script you asked for: Save it as loop.py and run it. Have fun!");
+  assert.strictEqual(stripTags("Look:\n[waifucode]\nsecret()"), "Look:"); // cut off mid-block
+  // Simulate the chat window's streaming loop, one character per delta, so the
+  // tags themselves arrive in pieces ("[waif", "[/waifuc" ...).
   const spoken = [];
   let introAt = -1;
   let acc = "";
   let sent = 0;
+  let prev = "";
   const flush = (final) => {
-    const sp = TP.speakableStream(acc);
-    assert.ok(sp.startsWith(TP.speakableStream(acc.slice(0, -1))), "speakable text only grows");
+    const sp = TP.speakableStream(acc, final);
+    assert.ok(sp.startsWith(prev), "speakable text only grows: " + JSON.stringify(prev) + " -> " + JSON.stringify(sp));
+    prev = sp;
     const { sentences, rest } = TP.takeSentences(sp.slice(sent), final);
     for (const s of sentences) {
       spoken.push(s);
@@ -594,10 +597,10 @@ test("code: never spoken, whole or streamed a character at a time", () => {
     flush(false);
   }
   flush(true);
-  assert.deepStrictEqual(spoken, ["Here's the script you asked for: [happy]", "Run it with python x.py.", "Have fun!"]);
+  assert.deepStrictEqual(spoken, ["Here's the script you asked for: [happy]", "Save it as loop.py and run it.", "Have fun!"]);
   // She starts the intro as soon as the code block opens, not after it ends.
-  assert.ok(introAt <= REPLY_WITH_CODE.indexOf("```") + 3, "intro spoken before the code finishes");
-  assert.ok(!spoken.join(" ").includes("print"));
+  assert.ok(introAt <= REPLY_WITH_CODE.indexOf("[waifucode]") + "[waifucode]".length, "intro spoken before the code finishes");
+  assert.ok(!/print|waifucode/.test(spoken.join(" ")));
 });
 
 test("stt: normModel falls back to base for unknown / legacy names", () => {

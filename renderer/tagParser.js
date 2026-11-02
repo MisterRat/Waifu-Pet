@@ -113,73 +113,88 @@
   }
 
   // --- Code blocks: shown in the chat window, never spoken ---
-  // The system prompt asks the LLM to put code in Markdown ``` fences. These
-  // helpers split a reply into text and code, and give the part that may be read
-  // aloud. They work on half-streamed replies too: an unclosed fence is code
-  // until it closes.
+  // The system prompt asks the LLM to wrap code in [waifucode] ... [/waifucode]
+  // (our own container, like the emotion tags; Markdown backticks are not used).
+  // These helpers split a reply into text and code, and give the part that may
+  // be read aloud. They work on half-streamed replies too: an unclosed
+  // [waifucode] is code until [/waifucode] arrives.
 
-  const FENCE = "```";
+  const OPEN_RE = /\[waifucode\]/i;
+  const CLOSE_RE = /\[\/waifucode\]/i;
+  const OPEN_TAG = "[waifucode]";
+  const CLOSE_TAG = "[/waifucode]";
   // Marks where a code block sat in the speakable text: a sentence always ends
   // there, so she says "Here's the script:" without waiting for the code.
   const CODE_BREAK = "\u0001";
 
+  /** Length of the longest end of `s` that is the start of `tag` (a tag still streaming in). */
+  function partialTagAtEnd(s, tag) {
+    const low = s.toLowerCase();
+    for (let n = Math.min(tag.length - 1, low.length); n > 0; n--) {
+      if (low.endsWith(tag.slice(0, n))) return n;
+    }
+    return 0;
+  }
+
+  /** Drop stray [/waifucode] closers (a close with no open). */
+  const dropStrayClose = (t) => t.replace(/\[\/waifucode\]/gi, "");
+
   /**
    * Split text into text and code segments.
    * @param {string} text
-   * @returns {Array<{type: "text", text: string} | {type: "code", code: string, lang: string, open: boolean}>}
-   *   open = the closing fence hasn't arrived yet (still streaming)
+   * @returns {Array<{type: "text", text: string} | {type: "code", code: string, open: boolean}>}
+   *   open = [/waifucode] hasn't arrived yet (still streaming)
    */
   function codeSegments(text) {
-    const s = String(text || "");
+    let rest = String(text || "");
     const out = [];
-    let i = 0;
-    while (i < s.length) {
-      const start = s.indexOf(FENCE, i);
-      if (start < 0) {
-        out.push({ type: "text", text: s.slice(i) });
+    while (rest) {
+      const o = OPEN_RE.exec(rest);
+      if (!o) {
+        out.push({ type: "text", text: dropStrayClose(rest) });
         break;
       }
-      if (start > i) out.push({ type: "text", text: s.slice(i, start) });
-      let body = start + FENCE.length;
-      // Optional language name on the fence line ("```python").
-      const head = /^([\w+#.-]*)[ \t]*(\r?\n|$)/.exec(s.slice(body));
-      let lang = "";
-      if (head && (head[2] || body + head[0].length === s.length)) {
-        lang = head[1];
-        body += head[0].length;
-      }
-      const end = s.indexOf(FENCE, body);
-      if (end < 0) {
-        out.push({ type: "code", code: s.slice(body), lang, open: true });
-        break;
-      }
-      out.push({ type: "code", code: s.slice(body, end).replace(/\r?\n$/, ""), lang, open: false });
-      i = end + FENCE.length;
+      if (o.index > 0) out.push({ type: "text", text: dropStrayClose(rest.slice(0, o.index)) });
+      rest = rest.slice(o.index + o[0].length);
+      const c = CLOSE_RE.exec(rest);
+      const body = c ? rest.slice(0, c.index) : rest;
+      // The code itself: no blank first/last line from the tags' own lines.
+      const code = body.replace(/^[ \t]*\r?\n/, "").replace(/\r?\n[ \t]*$/, "");
+      out.push({ type: "code", code, open: !c });
+      if (!c) break;
+      rest = rest.slice(c.index + c[0].length);
     }
     return out;
   }
 
-  /** Text segment as speech: inline `code` keeps its words, loses the backticks. */
-  const speakInline = (t) => t.replace(/`+/g, "");
-
   /**
    * The part of a (possibly half-streamed) reply that may be spoken. Each code
-   * block becomes a CODE_BREAK and the text stops at a fence that hasn't closed.
+   * block becomes a CODE_BREAK, the text stops at a [waifucode] that hasn't
+   * closed, and a tag still arriving ("[waifuc") is held back unless `final`.
    * As the reply grows, earlier output stays a prefix of later output, so a
    * streaming caller can keep an offset into it.
    */
-  function speakableStream(text) {
+  function speakableStream(text, final = false) {
     let out = "";
-    for (const seg of codeSegments(text)) {
-      if (seg.type === "text") out += speakInline(seg.text);
-      else out += CODE_BREAK;
-    }
+    const segs = codeSegments(text);
+    segs.forEach((seg, i) => {
+      if (seg.type === "code") {
+        out += CODE_BREAK;
+        return;
+      }
+      let t = seg.text;
+      if (!final && i === segs.length - 1) {
+        const n = Math.max(partialTagAtEnd(t, OPEN_TAG), partialTagAtEnd(t, CLOSE_TAG));
+        t = t.slice(0, t.length - n);
+      }
+      out += t;
+    });
     return out;
   }
 
   /** A whole reply with its code removed, ready to speak. */
   function stripCode(text) {
-    return speakableStream(text)
+    return speakableStream(text, true)
       .split(CODE_BREAK)
       .map((t) => t.trim())
       .filter(Boolean)
