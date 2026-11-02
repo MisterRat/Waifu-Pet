@@ -36,6 +36,8 @@
       padding: 2px 8px;
       cursor: pointer;
     }
+    #titlebar button:disabled { opacity: 0.4; cursor: default; }
+    #hush:not(:disabled) { border-color: #d0606a; color: #ffb3ba; }
     #messages {
       flex: 1;
       overflow-y: auto;
@@ -63,6 +65,52 @@
       background: #35304e;
       border-bottom-left-radius: 3px;
     }
+    /* Code blocks: shown, never spoken. */
+    .msg.pet.has-code { max-width: 95%; }
+    .msg .code {
+      margin: 6px 0;
+      background: #15131f;
+      border: 1px solid #4a4468;
+      border-radius: 6px;
+      overflow: hidden;
+      white-space: normal;
+    }
+    .msg .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px 2px 8px;
+      background: #24203a;
+      color: #8a84a8;
+      font-size: 11px;
+    }
+    .msg .code-head button {
+      background: none;
+      border: 1px solid #4a4468;
+      color: #e8e4f5;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .msg .code pre {
+      margin: 0;
+      padding: 8px;
+      overflow-x: auto;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: pre;
+      user-select: text;
+    }
+    .msg code.inline {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      background: #15131f;
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+    .msg .warn { margin-top: 4px; }
     .msg.sys {
       align-self: center;
       background: none;
@@ -150,6 +198,7 @@
   <div id="titlebar">
     <span id="petName">Chat</span>
     <div>
+      <button id="hush" title="Stop talking" disabled>⏹</button>
       <button id="clear" title="Clear chat history">🗑</button>
       <button id="speak" title="Toggle TTS">🔊</button>
       <button id="close">✕</button>

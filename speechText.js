@@ -4,15 +4,18 @@
 // looks like a stage direction should ever be read out by TTS.
 "use strict";
 
+// Code blocks are shown in the chat window, never spoken (same helper as the windows use).
+const { stripCode } = require("./renderer/tagParser");
+
 // "[word]" / "[two words]" / "[snake_case]" up to 40 chars, letters only (so
 // "[1]" citations and "[link](url)" style text with digits/URLs are untouched).
 const TAG_RE = /\s*\[[A-Za-z][A-Za-z _'-]{0,39}\]\s*/g;
 // A tag still being streamed: "[hap" at the very end.
 const OPEN_TAG_RE = /\s*\[[A-Za-z _'-]{0,39}$/;
 
-/** Remove every [tag] and tidy the whitespace left behind. */
+/** Remove code blocks and every [tag], and tidy the whitespace left behind. */
 function stripTags(text) {
-  return String(text || "")
+  return stripCode(String(text || ""))
     .replace(TAG_RE, " ")
     .replace(OPEN_TAG_RE, "")
     .replace(/\s{2,}/g, " ")

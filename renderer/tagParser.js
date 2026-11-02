@@ -112,5 +112,102 @@
       .trim();
   }
 
-  return { parseEmotionAndMotionTags, stripAnyTags };
+  // --- Code blocks: shown in the chat window, never spoken ---
+  // The system prompt asks the LLM to put code in Markdown ``` fences. These
+  // helpers split a reply into text and code, and give the part that may be read
+  // aloud. They work on half-streamed replies too: an unclosed fence is code
+  // until it closes.
+
+  const FENCE = "```";
+  // Marks where a code block sat in the speakable text: a sentence always ends
+  // there, so she says "Here's the script:" without waiting for the code.
+  const CODE_BREAK = "\u0001";
+
+  /**
+   * Split text into text and code segments.
+   * @param {string} text
+   * @returns {Array<{type: "text", text: string} | {type: "code", code: string, lang: string, open: boolean}>}
+   *   open = the closing fence hasn't arrived yet (still streaming)
+   */
+  function codeSegments(text) {
+    const s = String(text || "");
+    const out = [];
+    let i = 0;
+    while (i < s.length) {
+      const start = s.indexOf(FENCE, i);
+      if (start < 0) {
+        out.push({ type: "text", text: s.slice(i) });
+        break;
+      }
+      if (start > i) out.push({ type: "text", text: s.slice(i, start) });
+      let body = start + FENCE.length;
+      // Optional language name on the fence line ("```python").
+      const head = /^([\w+#.-]*)[ \t]*(\r?\n|$)/.exec(s.slice(body));
+      let lang = "";
+      if (head && (head[2] || body + head[0].length === s.length)) {
+        lang = head[1];
+        body += head[0].length;
+      }
+      const end = s.indexOf(FENCE, body);
+      if (end < 0) {
+        out.push({ type: "code", code: s.slice(body), lang, open: true });
+        break;
+      }
+      out.push({ type: "code", code: s.slice(body, end).replace(/\r?\n$/, ""), lang, open: false });
+      i = end + FENCE.length;
+    }
+    return out;
+  }
+
+  /** Text segment as speech: inline `code` keeps its words, loses the backticks. */
+  const speakInline = (t) => t.replace(/`+/g, "");
+
+  /**
+   * The part of a (possibly half-streamed) reply that may be spoken. Each code
+   * block becomes a CODE_BREAK and the text stops at a fence that hasn't closed.
+   * As the reply grows, earlier output stays a prefix of later output, so a
+   * streaming caller can keep an offset into it.
+   */
+  function speakableStream(text) {
+    let out = "";
+    for (const seg of codeSegments(text)) {
+      if (seg.type === "text") out += speakInline(seg.text);
+      else out += CODE_BREAK;
+    }
+    return out;
+  }
+
+  /** A whole reply with its code removed, ready to speak. */
+  function stripCode(text) {
+    return speakableStream(text)
+      .split(CODE_BREAK)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  /**
+   * Take complete sentences off the front of streamed speakable text. A
+   * sentence ends at . ! ? … followed by whitespace (so "3.5" is safe), at CJK
+   * sentence punctuation, or where a code block sat. `final` also flushes the rest.
+   * @returns {{sentences: string[], rest: string}}
+   */
+  function takeSentences(buf, final) {
+    const out = [];
+    let rest = buf;
+    const re = /[\s\S]*?(?:[.!?…]+["'”’)\]]*(?=\s)|[。！？]+["'”’)\]]*|\u0001)/;
+    for (;;) {
+      const m = re.exec(rest);
+      if (!m) break;
+      out.push(m[0].replace(/\u0001/g, "").trim());
+      rest = rest.slice(m[0].length);
+    }
+    if (final && rest.trim()) {
+      out.push(rest.replace(/\u0001/g, "").trim());
+      rest = "";
+    }
+    return { sentences: out.filter(Boolean), rest };
+  }
+
+  return { parseEmotionAndMotionTags, stripAnyTags, codeSegments, speakableStream, stripCode, takeSentences, CODE_BREAK };
 });

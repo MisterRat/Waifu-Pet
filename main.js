@@ -1,7 +1,7 @@
 // Electron main process: pet window, chat window, settings window, tray.
 "use strict";
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, powerMonitor, session, safeStorage, shell, utilityProcess } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, powerMonitor, session, safeStorage, shell, utilityProcess, clipboard } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { startStaticServer } = require("./server");
@@ -669,6 +669,11 @@ function registerWindowIpc() {
     if (!fromPet(e)) return;
     petSpeaking = Boolean(speaking);
     if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
+  });
+
+  // Copy button on a code block in the chat window.
+  ipcMain.on("clipboard:write-text", (e, text) => {
+    if (fromChat(e) && typeof text === "string") clipboard.writeText(text.slice(0, 200000));
   });
 
   // Chat window asks main to push a line to the pet's speech bubble.

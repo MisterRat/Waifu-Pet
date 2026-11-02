@@ -871,7 +871,8 @@
     const now = performance.now();
     lastInteractionAt = now;
     if (!append) clearSpeech();
-    const parsed = WaifuTagParser.parseEmotionAndMotionTags(text || "", "neutral", {
+    // Code blocks are for the chat window only: she never reads them out.
+    const parsed = WaifuTagParser.parseEmotionAndMotionTags(WaifuTagParser.stripCode(text || ""), "neutral", {
       emotions: exprNames,
       motions: Object.keys(MOTION_MAP),
     });

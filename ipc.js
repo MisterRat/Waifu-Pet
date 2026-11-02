@@ -225,13 +225,21 @@ function tagInstructions(v) {
   );
 }
 
-/** Full system prompt for a model: persona (per-model override or global) + its tags. */
+// Code is shown in the chat window but never read aloud (see codeSegments in
+// renderer/tagParser.js), so the LLM must put it in fenced blocks.
+const CODE_INSTRUCTIONS =
+  "\n\nWhen you give code, commands, file contents or anything else meant to be copied, put it in a " +
+  "Markdown code block fenced with three backticks (```). Code blocks are shown on screen but are " +
+  "never read aloud, so introduce the code in a short spoken sentence and don't read it out, spell it " +
+  "out or describe it line by line.";
+
+/** Full system prompt for a model: persona (per-model override or global) + its tags + code rule. */
 function buildSystemPrompt(cfg, modelName) {
   const base =
     modelOverride(cfg.models, modelName, "systemPrompt") ||
     (cfg.chat.systemPrompt || "").trim() ||
     "You are a cheerful anime desktop pet.";
-  return base + tagInstructions(modelVocab(modelName));
+  return base + tagInstructions(modelVocab(modelName)) + CODE_INSTRUCTIONS;
 }
 
 function safeSend(wc, channel, payload) {
@@ -436,6 +444,7 @@ module.exports = {
   completeChat,
   streamChat,
   buildSystemPrompt,
+  CODE_INSTRUCTIONS,
   tagInstructions,
   modelVocab,
   chatCompletionsUrl,
