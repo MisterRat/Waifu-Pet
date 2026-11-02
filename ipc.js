@@ -200,13 +200,15 @@ async function streamChat(cfg, messages, { onDelta, signal }) {
 /** Expression/motion tag names of a model (folder name), for prompts and parsing. */
 function modelVocab(name) {
   const m = listModels().find((x) => x.name === name);
-  if (!m) return { name: name || "", emotions: [], motions: [] };
+  if (!m) return { name: name || "", emotions: [], motions: [], idles: [] };
   const base = (f) => f.replace(/^.*\//, "").replace(/\.(exp3|motion3)\.json$/i, "").toLowerCase();
   return {
     name: m.name,
     // Emotions mapped in waifu-faces.json stay usable as tags (e.g. [crying] -> Sad face).
     emotions: [...new Set([...m.expressions.map(base), ...Object.keys((m.faces && m.faces.map) || {}).map((k) => k.toLowerCase())])],
     motions: m.motions.map(base).filter((n) => !/^idle/.test(n) && n !== "blink"),
+    // Idle loops (Idle_*): not tags the LLM may use, but the Settings Test page plays them.
+    idles: m.motions.map(base).filter((n) => /^idle/.test(n)),
   };
 }
 

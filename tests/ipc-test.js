@@ -13,7 +13,7 @@ Module._load = function (request, ...rest) {
   if (request === "electron") return { ipcMain: { handle: (ch, fn) => (handlers[ch] = fn), on() {} } };
   return realLoad.call(this, request, ...rest);
 };
-const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt, CODE_INSTRUCTIONS, registerIpc } = require("../ipc");
+const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt, CODE_INSTRUCTIONS, registerIpc, modelVocab } = require("../ipc");
 Module._load = realLoad;
 
 let passed = 0;
@@ -138,6 +138,15 @@ const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: te
     assert.match(CODE_INSTRUCTIONS, /never read aloud/);
     const t = buildSystemPrompt(cfg, "Tamamo");
     assert.ok(t.indexOf("[happy]") > 0 && t.indexOf("[happy]") < t.indexOf("[waifucode]"), "tags first, then the code rule");
+  });
+
+  await test("modelVocab: faces, motions and idle loops for the Settings Test page", () => {
+    const v = modelVocab("Tamamo");
+    assert.ok(v.emotions.includes("happy"));
+    assert.ok(v.motions.includes("jiggle_dance"));
+    assert.ok(!v.motions.some((m) => m.startsWith("idle") || m === "blink"), "idle loops and blink aren't motion tags");
+    assert.ok(v.idles.includes("idle_sway") && v.idles.every((n) => n.startsWith("idle")));
+    assert.deepStrictEqual(modelVocab("no-such-model"), { name: "no-such-model", emotions: [], motions: [], idles: [] });
   });
 
   await test("history: only the chat window may read, save or clear it", async () => {

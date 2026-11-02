@@ -14,8 +14,40 @@ document.querySelectorAll("nav button.tab").forEach((btn) => {
     document.querySelectorAll("nav button.tab").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll("section.page").forEach((p) => p.classList.toggle("active", p.id === btn.dataset.page));
     document.querySelector("main").scrollTop = 0;
+    if (btn.dataset.page === "pTest") fillTestPage();
   });
 });
+
+// ---- Test page: a button for every face, motion and idle loop of the loaded model ----
+async function fillTestPage() {
+  let v = { name: "", emotions: [], motions: [], idles: [] };
+  try {
+    v = await window.pet.modelsVocab();
+  } catch {}
+  $("testModel").textContent = v.name ? "· " + v.name : "";
+  const fill = (id, kind, names, empty) => {
+    const box = $(id);
+    box.textContent = "";
+    if (!names || !names.length) {
+      const span = document.createElement("span");
+      span.className = "empty";
+      span.textContent = empty;
+      box.appendChild(span);
+      return;
+    }
+    for (const name of names) {
+      const b = document.createElement("button");
+      b.className = "btn secondary small";
+      b.textContent = name;
+      b.title = kind === "idle" ? "Play this idle loop" : "[" + name + "]";
+      b.addEventListener("click", () => window.pet.testPlay(kind, name));
+      box.appendChild(b);
+    }
+  };
+  fill("testEmotions", "emotion", v.emotions, "This model has no faces (.exp3.json).");
+  fill("testMotions", "motion", v.motions, "This model has no motions.");
+  fill("testIdles", "idle", v.idles, "This model has no idle loops (Idle_*.motion3.json).");
+}
 
 // ---- built-in Whisper status ----
 function showSttStatus(st) {

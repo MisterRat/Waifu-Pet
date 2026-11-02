@@ -170,6 +170,11 @@
     .bar { height: 6px; background: #433c68; border-radius: 3px; overflow: hidden; }
     .bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
+    /* Test page */
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips .empty { color: var(--muted); font-size: 12px; }
+    .card > h2 small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+
     /* footer */
     footer {
       grid-area: foot;
@@ -189,6 +194,7 @@
     <button class="tab" data-page="pPet"><span class="ico">🦊</span>Pet</button>
     <button class="tab" data-page="pBehaviour"><span class="ico">✨</span>Behaviour</button>
     <button class="tab" data-page="pPerf"><span class="ico">⚡</span>Performance</button>
+    <button class="tab" data-page="pTest"><span class="ico">🎭</span>Test</button>
   </nav>
 
   <main>
@@ -502,6 +508,23 @@
           </div>
           <div class="ctl"><input id="perfFullscreen" class="switch" type="checkbox" /></div>
         </div>
+      </div>
+    </section>
+    <!-- ================= TEST ================= -->
+    <section class="page" id="pTest">
+      <h1>Test</h1>
+      <p class="lead">Play any face or motion on the pet right now. These are the same tags the AI uses.</p>
+      <div class="card">
+        <h2>Faces <small id="testModel"></small></h2>
+        <div id="testEmotions" class="chips"></div>
+      </div>
+      <div class="card">
+        <h2>Motions</h2>
+        <div id="testMotions" class="chips"></div>
+      </div>
+      <div class="card">
+        <h2>Idle loops</h2>
+        <div id="testIdles" class="chips"></div>
       </div>
     </section>
   </main>

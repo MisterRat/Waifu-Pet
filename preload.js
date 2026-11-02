@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("pet", {
   closeSettings: () => ipcRenderer.send("settings:close"),
   pushLine: (payload) => ipcRenderer.send("chat:push-line", payload),
   appVersion: () => ipcRenderer.invoke("app:version"),
+  testPlay: (kind, name) => ipcRenderer.send("pet:test-play", { kind, name }), // Settings → Test page
+  showMenu: () => ipcRenderer.send("pet:context-menu"), // pet window: right-click
   copyText: (text) => ipcRenderer.send("clipboard:write-text", String(text)), // chat window only
   setSpeaking: (speaking) => ipcRenderer.send("pet:speaking", !!speaking), // pet window: TTS audio playing or queued
 
@@ -60,4 +62,5 @@ contextBridge.exposeInMainWorld("pet", {
   onAssistantLine: (cb) => on("chat:assistant-line", cb), // unprompted line to add to the chat log
   onPetSpeaking: (cb) => on("pet:speaking", cb), // chat window: she started/stopped speaking
   onModelChanged: (cb) => on("chat:model-changed", cb), // chat window: another model was loaded
+  onPlay: (cb) => on("pet:play", cb), // pet window: play a face/motion from Settings → Test
 });

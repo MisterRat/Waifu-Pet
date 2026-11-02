@@ -63,6 +63,7 @@ Windows SmartScreen may warn the first time ("More info" → "Run anyway").
 | Left-drag | Move her anywhere on any monitor |
 | Mouse wheel | Zoom the model inside the window (0.4× to 20×) |
 | Right-drag | Move the model up/down inside the window |
+| Right-click | The same menu as the tray icon |
 | Tray → Chat | Open the chat window |
 
 Zoom and position are remembered **per model**.
@@ -97,7 +98,8 @@ Behaviour (each part has an off switch in Settings):
 
 ## Settings
 
-Open from the tray. Chat and TTS each take a base URL (for example
+Open from the tray. The **Test** page has a button for every face, motion and
+idle loop of the loaded model, to play them on the pet right away. Chat and TTS each take a base URL (for example
 `http://localhost:11434/v1`), an optional API key and a model name. Per model you
 can set a persona prompt, a TTS voice and the framing. The **Model check** panel
 lists what the selected model ships and what will work (blinking, lip sync, eye
