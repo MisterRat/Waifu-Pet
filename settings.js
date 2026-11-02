@@ -52,6 +52,7 @@ const DEFAULTS = {
     lookAtMouse: true, // eyes/head follow the cursor while it moves
     idleBehavior: true, // fidgets, glances and small mood changes when idle
     tailWagGain: 2.5, // multiplier on tail sway/wag amplitude (1 = the model's own motion)
+    position: null, // { x, y } top-left of the pet window, saved when she is moved; restored at startup
   },
   // Unprompted behaviour: greetings, welcome-back and the occasional remark.
   proactive: {
