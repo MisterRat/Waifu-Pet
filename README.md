@@ -68,6 +68,11 @@ Behaviour (each part has an off switch in Settings):
 - She speaks up now and then, greets you at launch and welcomes you back after
   a long absence (needs the chat server).
 - Replies stream in and she starts speaking sentence by sentence.
+- ⏹ in the chat title bar stops her talking at once. A reply that is still
+  coming in keeps appearing in the chat, but she doesn't speak the rest of it.
+- Code is shown, never read aloud: she is told to put code, commands and file
+  contents in ``` code blocks, which appear in the chat in monospace with a
+  **Copy** button and are left out of her speech.
 - Each model remembers its own conversation, also after the chat window or the
   app is closed; her greetings and remarks are part of it. She is sent the last
   10 messages as context. 🗑 in the chat title bar clears the current model's

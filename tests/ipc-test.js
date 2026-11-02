@@ -13,7 +13,7 @@ Module._load = function (request, ...rest) {
   if (request === "electron") return { ipcMain: { handle: (ch, fn) => (handlers[ch] = fn), on() {} } };
   return realLoad.call(this, request, ...rest);
 };
-const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt, registerIpc } = require("../ipc");
+const { streamChat, completeChat, chatCompletionsUrl, ttsSpeechUrl, buildSystemPrompt, CODE_INSTRUCTIONS, registerIpc } = require("../ipc");
 Module._load = realLoad;
 
 let passed = 0;
@@ -128,11 +128,15 @@ const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: te
     assert.strictEqual(text, "hi there");
   });
 
-  await test("buildSystemPrompt appends the model's own tags", () => {
+  await test("buildSystemPrompt appends the model's own tags and the code-block rule", () => {
     const cfg = { chat: { systemPrompt: "Persona." }, models: {} };
-    // The bundled models folder is used if present; with no match it is just the persona.
+    // The bundled models folder is used if present; with no match it is the persona and the code rule.
     const p = buildSystemPrompt(cfg, "no-such-model");
-    assert.strictEqual(p, "Persona.");
+    assert.strictEqual(p, "Persona." + CODE_INSTRUCTIONS);
+    assert.match(CODE_INSTRUCTIONS, /```/);
+    assert.match(CODE_INSTRUCTIONS, /never read aloud/);
+    const t = buildSystemPrompt(cfg, "Tamamo");
+    assert.ok(t.indexOf("[happy]") > 0 && t.indexOf("[happy]") < t.indexOf("```"), "tags first, then the code rule");
   });
 
   await test("history: only the chat window may read, save or clear it", async () => {

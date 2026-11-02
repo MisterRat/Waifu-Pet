@@ -9,6 +9,8 @@ const sendBtn = $("send");
 const speakBtn = $("speak");
 const micBtn = $("mic");
 const talkBtn = $("talk");
+const hushBtn = $("hush");
+const TP = window.WaifuTagParser;
 
 let history = []; // [{role, content}] — this model's saved conversation
 let historyModel = ""; // the model whose conversation is shown
@@ -52,33 +54,76 @@ function displayText(raw) {
   return window.WaifuTagParser.stripAnyTags(parsed.cleanText);
 }
 
+/** A code block: monospace, whitespace kept, a Copy button. Shown, never spoken. */
+function codeBlock(seg) {
+  const box = document.createElement("div");
+  box.className = "code";
+  const head = document.createElement("div");
+  head.className = "code-head";
+  const label = document.createElement("span");
+  label.textContent = (seg.lang || "code") + (seg.open ? " …" : "");
+  const copy = document.createElement("button");
+  copy.textContent = "Copy";
+  copy.title = "Copy the code";
+  copy.addEventListener("click", () => {
+    window.pet.copyText(seg.code);
+    copy.textContent = "Copied";
+    setTimeout(() => (copy.textContent = "Copy"), 1200);
+  });
+  head.append(label, copy);
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = seg.code;
+  pre.appendChild(code);
+  box.append(head, pre);
+  return box;
+}
+
+/**
+ * Show a reply (raw LLM text) in a bubble: [tags] removed from the text, code
+ * blocks shown as code. Returns false when there is nothing to show yet.
+ */
+function renderReply(el, raw) {
+  el.textContent = "";
+  let hasCode = false;
+  for (const seg of TP.codeSegments(raw)) {
+    if (seg.type === "code") {
+      hasCode = true;
+      el.appendChild(codeBlock(seg));
+    } else {
+      const t = displayText(seg.text);
+      if (!t) continue;
+      // Inline `code` is shown in monospace (and spoken without the backticks).
+      const line = document.createElement("div");
+      t.split(/`([^`]+)`/).forEach((part, i) => {
+        if (!part) return;
+        if (i % 2) {
+          const c = document.createElement("code");
+          c.className = "inline";
+          c.textContent = part;
+          line.appendChild(c);
+        } else line.appendChild(document.createTextNode(part));
+      });
+      el.appendChild(line);
+    }
+  }
+  el.classList.toggle("has-code", hasCode);
+  return el.childNodes.length > 0;
+}
+
+/** @param {string} text assistant messages are raw LLM text (tags and code are rendered) */
 function addMsg(role, text) {
   const div = document.createElement("div");
   div.className = "msg " + (role === "user" ? "user" : role === "assistant" ? "pet" : "sys");
-  div.textContent = text;
+  if (role !== "assistant" || !renderReply(div, text)) div.textContent = text;
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return div;
 }
 
-// Split streamed text into complete sentences. A sentence ends at . ! ? …
-// followed by whitespace (so "3.5" is safe), or at CJK sentence punctuation.
-// `final` also flushes whatever is left.
-function takeSentences(buf, final) {
-  const out = [];
-  let rest = buf;
-  const re = /[\s\S]*?(?:[.!?…]+["'”’)\]]*(?=\s)|[。！？]+["'”’)\]]*)/;
-  for (;;) {
-    const m = re.exec(rest);
-    if (!m) break;
-    out.push(m[0].trim());
-    rest = rest.slice(m[0].length);
-  }
-  if (final && rest.trim()) {
-    out.push(rest.trim());
-    rest = "";
-  }
-  return { sentences: out.filter(Boolean), rest };
+// The ⏹ button is live while she is speaking or a spoken reply is still coming.
+function updateHush() {
+  hushBtn.disabled = !(conv.petSpeaking || (current && speakOn && !current.silenced));
 }
 
 // Stream events are routed to whichever reply is in flight. Events can arrive
@@ -99,22 +144,26 @@ window.pet.onChatDone((e) => {
 async function streamReply(apiMessages, bubble) {
   return new Promise((resolve) => {
     let acc = "";
-    let sent = 0; // chars of `acc` already given to the pet
+    let sent = 0; // chars of the speakable text already given to the pet
     let sentenceCount = 0;
     let cancelled = false;
 
+    // Only the text outside code blocks is spoken; a code block ends a
+    // sentence, and nothing after an unclosed fence is spoken until it closes.
     const flush = (final) => {
-      const { sentences, rest } = takeSentences(acc.slice(sent), final);
+      const speakable = TP.speakableStream(acc);
+      const { sentences, rest } = TP.takeSentences(speakable.slice(sent), final);
       for (const text of sentences) {
-        window.pet.pushLine({ text, speak: speakOn, append: sentenceCount > 0 });
+        window.pet.pushLine({ text, speak: speakOn && !state.silenced, append: sentenceCount > 0 });
         sentenceCount++;
       }
-      sent = acc.length - rest.length;
+      sent = speakable.length - rest.length;
     };
 
     const state = {
       id: null,
       early: [],
+      silenced: false, // ⏹ pressed: the rest of this reply is shown, not spoken
       cancel() {
         cancelled = true;
         if (state.id != null) window.pet.chatCancel(state.id);
@@ -122,25 +171,30 @@ async function streamReply(apiMessages, bubble) {
       },
       onDelta(text) {
         acc += text;
-        bubble.textContent = displayText(acc) || "…";
+        if (!renderReply(bubble, acc)) bubble.textContent = "…";
         messagesEl.scrollTop = messagesEl.scrollHeight;
         flush(false);
       },
       onDone(e) {
         if (e.error) {
-          if (acc.trim()) bubble.textContent = displayText(acc) + "\n⚠ " + e.error;
-          else {
+          if (acc.trim() && renderReply(bubble, acc)) {
+            const warn = document.createElement("div");
+            warn.className = "warn";
+            warn.textContent = "⚠ " + e.error;
+            bubble.appendChild(warn);
+          } else {
             bubble.textContent = "⚠ " + e.error;
             bubble.classList.add("sys");
           }
         } else {
           if (!cancelled) flush(true);
-          bubble.textContent = displayText(acc) || (cancelled ? "(stopped)" : "(no reply)");
+          if (!renderReply(bubble, acc)) bubble.textContent = cancelled ? "(stopped)" : "(no reply)";
         }
         resolve({ content: acc.trim(), cancelled });
       },
     };
     current = state;
+    updateHush();
 
     window.pet
       .chatStream(apiMessages)
@@ -188,7 +242,7 @@ async function send(spoken) {
       // Non-streaming: wait for the whole reply, then act it out in one go.
       const res = await window.pet.chatSend(apiMessages);
       const content = (res && res.content) || "(no reply)";
-      bubble.textContent = displayText(content) || content;
+      if (!renderReply(bubble, content)) bubble.textContent = content;
       if (gen !== historyGen) return; // cleared while waiting
       history.push({ role: "assistant", content });
       save("assistant", content);
@@ -206,6 +260,7 @@ async function send(spoken) {
     bubble.classList.add("sys");
   } finally {
     current = null;
+    updateHush();
     busy = false;
     convUpdate();
     sendBtn.textContent = "Send";
@@ -231,7 +286,7 @@ async function loadHistory() {
   messagesEl.textContent = "";
   const shown = history.slice(-SHOWN_ON_OPEN);
   if (history.length > shown.length) addMsg("sys", `${history.length - shown.length} earlier messages not shown`);
-  for (const m of shown) addMsg(m.role, m.role === "assistant" ? displayText(m.content) || m.content : m.content);
+  for (const m of shown) addMsg(m.role, m.content);
 }
 
 // Clear: forget this model's conversation (saved, remembered and shown), stop
@@ -261,6 +316,15 @@ speakBtn.addEventListener("click", () => {
   speakOn = !speakOn;
   speakBtn.textContent = speakOn ? "🔊" : "🔇";
   speakBtn.classList.toggle("off", !speakOn);
+  updateHush();
+});
+
+// ⏹ Stop talking: cut her off now. A reply that is still streaming keeps
+// appearing in the chat, but she doesn't speak the rest of it.
+hushBtn.addEventListener("click", () => {
+  if (current) current.silenced = true;
+  window.pet.pushLine({ text: "", speak: false });
+  updateHush();
 });
 
 // --- Voice input: click to record, click again to stop; the recording is
@@ -494,6 +558,7 @@ talkBtn.addEventListener("click", () => {
 // The pet window reports when she starts and stops speaking.
 window.pet.onPetSpeaking((speaking) => {
   conv.petSpeaking = Boolean(speaking);
+  updateHush();
   convUpdate();
 });
 document.addEventListener("visibilitychange", convUpdate);
@@ -503,7 +568,7 @@ window.addEventListener("beforeunload", () => conv.listener && conv.listener.des
 // remember it as part of the conversation (main has already saved it).
 window.pet.onAssistantLine(({ text, model }) => {
   if (model && model !== historyModel) return;
-  addMsg("assistant", displayText(text) || text);
+  addMsg("assistant", text);
   history.push({ role: "assistant", content: text });
 });
 

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("pet", {
   closeChat: () => ipcRenderer.send("chat:close"),
   closeSettings: () => ipcRenderer.send("settings:close"),
   pushLine: (payload) => ipcRenderer.send("chat:push-line", payload),
+  copyText: (text) => ipcRenderer.send("clipboard:write-text", String(text)), // chat window only
   setSpeaking: (speaking) => ipcRenderer.send("pet:speaking", !!speaking), // pet window: TTS audio playing or queued
 
   // chat
