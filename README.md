@@ -67,6 +67,9 @@ Windows SmartScreen may warn the first time ("More info" → "Run anyway").
 | Tray → Chat | Open the chat window |
 | Enter / Shift+Enter (chat) | Send / start a new line in the message |
 
+The chat window remembers whether it was open, where it was and its size: if it
+was open when you quit, it opens again in the same place at the next start.
+
 Zoom and position are remembered **per model**. Where she sits on the desktop
 is remembered too: she comes back to the same spot when the app starts (moved
 onto the nearest screen if that monitor is gone).
@@ -82,8 +85,9 @@ Behaviour (each part has an off switch in Settings):
 - Replies stream in and she starts speaking sentence by sentence.
 - ⏹ in the chat title bar stops her talking at once. A reply that is still
   coming in keeps appearing in the chat, but she doesn't speak the rest of it.
-- Code is shown, never read aloud: she is told to put code, commands and file
-  contents between `[waifucode]` and `[/waifucode]`. Those blocks appear in the
+- Code is shown, never read aloud: she is told to put code, commands, SQL
+  queries (SQL Server, MySQL, …) and file contents between `[waifucode]` and
+  `[/waifucode]`. Those blocks appear in the
   chat in monospace with a **Copy** button and are left out of her speech.
   (Markdown backticks are not used for this.)
 - Each model remembers its own conversation, also after the chat window or the

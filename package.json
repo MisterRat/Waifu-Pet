@@ -1,6 +1,6 @@
 {
   "name": "waifu-pet",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Live2D desktop pet with OpenAI-compatible chat, voice and proactive companionship",
   "author": "MisterRat",
   "private": true,

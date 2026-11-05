@@ -62,5 +62,6 @@ contextBridge.exposeInMainWorld("pet", {
   onAssistantLine: (cb) => on("chat:assistant-line", cb), // unprompted line to add to the chat log
   onPetSpeaking: (cb) => on("pet:speaking", cb), // chat window: she started/stopped speaking
   onModelChanged: (cb) => on("chat:model-changed", cb), // chat window: another model was loaded
+  onRearmMouse: (cb) => on("pet:rearm-mouse", cb), // pet window: click-through was re-applied by main
   onPlay: (cb) => on("pet:play", cb), // pet window: play a face/motion from Settings → Test
 });

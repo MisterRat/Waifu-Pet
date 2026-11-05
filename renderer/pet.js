@@ -658,6 +658,13 @@
     window.pet.setIgnoreMouse(v);
   }
 
+  // Main re-applied click-through (after a menu, show/hide, always-on-top change):
+  // forget any half-finished drag and wait for the cursor to come back over her.
+  window.pet.onRearmMouse(() => {
+    drag = null;
+    ignoreMouse = true;
+  });
+
   // Pixel-accurate hit test. The window is click-through everywhere except
   // where the model actually has visible pixels. We read the alpha of the
   // single framebuffer pixel under the cursor right AFTER Pixi has drawn the

@@ -67,6 +67,12 @@ const DEFAULTS = {
     pauseWhenHidden: true, // stop rendering while the pet window is hidden
     hideOnFullscreen: true, // hide while a fullscreen game/video is running (Windows)
   },
+  // The chat window as it was last left: open or closed, and where/how big
+  // (bounds = { x, y, width, height }; null = default size bottom-right).
+  chatWindow: {
+    open: false,
+    bounds: null,
+  },
   // Per-model overrides: { <ModelName>: { systemPrompt?, voice?, framing? } }.
   // Empty/missing values fall back to the global chat.systemPrompt / tts.voice.
   // framing = { zoom, x, y }: how the model sits in the window (x/y are
