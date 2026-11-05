@@ -291,6 +291,24 @@ test("settings: the pet's screen position is saved and survives a restart", () =
   assert.strictEqual(b.get().pet.scale, 1.25);
 });
 
+test("voice speed: global default 1x, per-model override, cleared override falls back", () => {
+  const { SettingsStore, voiceSpeed } = require("../settings.js");
+  const dir = require("fs").mkdtempSync(path.join(require("os").tmpdir(), "wp-speed-"));
+  const s = new SettingsStore(dir);
+  assert.strictEqual(voiceSpeed(s.get(), "Tamamo"), 1, "default is 1x");
+  s.update({ tts: { speed: 1.3 } });
+  assert.strictEqual(voiceSpeed(s.get(), "Tamamo"), 1.3, "global speed");
+  s.update({ models: { Tamamo: { speed: 1.75 } } });
+  assert.strictEqual(voiceSpeed(s.get(), "Tamamo"), 1.75, "model's own speed wins");
+  assert.strictEqual(voiceSpeed(s.get(), "MeiLin"), 1.3, "other models keep the global speed");
+  const again = new SettingsStore(dir); // saved per model across restarts
+  assert.strictEqual(voiceSpeed(again.get(), "Tamamo"), 1.75);
+  again.update({ models: { Tamamo: { speed: null } } }); // "Own voice speed" switched off
+  assert.strictEqual(voiceSpeed(again.get(), "Tamamo"), 1.3);
+  assert.strictEqual(voiceSpeed({ tts: { speed: 9 }, models: { X: { speed: 0.1 } } }, "X"), 0.5, "kept in range");
+  assert.strictEqual(voiceSpeed({ tts: { speed: 9 } }, "X"), 2);
+});
+
 test("modelOverride: returns non-empty override", () => {
   const models = { ModelA: { systemPrompt: "You are a test persona.", voice: "af" } };
   assert.strictEqual(modelOverride(models, "ModelA", "systemPrompt"), "You are a test persona.");
