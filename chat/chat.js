@@ -216,7 +216,10 @@ async function send(spoken) {
   }
   const text = fromVoice ? spoken.trim() : input.value.trim();
   if (!text) return;
-  if (!fromVoice) input.value = "";
+  if (!fromVoice) {
+    input.value = "";
+    fitInput();
+  }
   addMsg("user", text);
   history.push({ role: "user", content: text });
   const gen = historyGen;
@@ -263,9 +266,20 @@ async function send(spoken) {
 }
 
 sendBtn.addEventListener("click", () => send());
+// Enter sends; Shift+Enter starts a new line (the textarea's own behaviour).
+// Enter while an IME is composing (Japanese, Chinese input) confirms the text instead.
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") send();
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  send();
 });
+
+// The input grows with its text (up to its max-height, then it scrolls).
+function fitInput() {
+  input.style.height = "auto";
+  input.style.height = input.scrollHeight + 2 + "px";
+}
+input.addEventListener("input", fitInput);
 
 // Show this model's saved conversation (on open, and after a model switch).
 async function loadHistory() {
@@ -356,6 +370,7 @@ async function transcribe(blob) {
     if (Math.sqrt(sum / audio.length) < 0.003) throw new Error("No speech was detected");
     const { text } = await window.pet.sttTranscribe(audio);
     input.value = text;
+    fitInput();
     if (cfg.stt && cfg.stt.autoSend !== false) send();
     else input.focus();
   } catch (e) {

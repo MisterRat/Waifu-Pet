@@ -65,6 +65,7 @@ Windows SmartScreen may warn the first time ("More info" → "Run anyway").
 | Right-drag | Move the model up/down inside the window |
 | Right-click | The same menu as the tray icon |
 | Tray → Chat | Open the chat window |
+| Enter / Shift+Enter (chat) | Send / start a new line in the message |
 
 Zoom and position are remembered **per model**. Where she sits on the desktop
 is remembered too: she comes back to the same spot when the app starts (moved

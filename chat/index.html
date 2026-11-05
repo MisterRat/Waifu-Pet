@@ -112,6 +112,7 @@
     }
     #inputrow {
       display: flex;
+      align-items: flex-end; /* buttons stay at the bottom as the input grows */
       gap: 6px;
       padding: 10px;
       background: #2a2540;
@@ -124,7 +125,12 @@
       border-radius: 8px;
       padding: 8px 10px;
       font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
       outline: none;
+      resize: none; /* grows with its text instead, up to max-height */
+      overflow-y: auto;
+      max-height: 160px;
     }
     #send {
       background: #7a5fd0;
@@ -200,7 +206,7 @@
   <div id="messages"></div>
   <div id="convStatus" hidden><span class="dot"></span><span id="convText"></span></div>
   <div id="inputrow">
-    <input id="input" type="text" placeholder="Say something…" autocomplete="off" />
+    <textarea id="input" rows="1" placeholder="Say something…" autocomplete="off" title="Enter sends · Shift+Enter starts a new line"></textarea>
     <button id="mic" title="Click to talk, click again to send" hidden>🎤</button>
     <button id="talk" title="Conversation mode: just talk, she answers when you pause" aria-pressed="false" hidden>🗣</button>
     <button id="send">Send</button>
