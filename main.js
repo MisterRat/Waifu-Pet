@@ -326,7 +326,10 @@ function createPetWindow(pos) {
   });
   const winRef = petWin;
   // Let the renderer stop drawing while the window is hidden.
-  petWin.on("show", () => winRef.webContents.send("pet:visible", true));
+  petWin.on("show", () => {
+    winRef.webContents.send("pet:visible", true);
+    rearmPetMouse();
+  });
   petWin.on("hide", () => winRef.webContents.send("pet:visible", false));
   petWin.on("closed", () => {
     if (petWin === winRef) petWin = null;
@@ -338,6 +341,35 @@ function createPetWindow(pos) {
   });
 }
 
+// --- Chat window: remembered open/closed, position and size across restarts ---
+const CHAT_MIN_W = 300;
+const CHAT_MIN_H = 300;
+let quitting = false; // closing because the app quits: the chat stays "open" for next launch
+let saveChatTimer = null;
+
+/** Saved chat bounds, kept on the desktop and no bigger than the screen it lands on; null if none. */
+function savedChatBounds() {
+  const b = (settings.get().chatWindow || {}).bounds;
+  if (!b || ![b.x, b.y, b.width, b.height].every(Number.isFinite)) return null;
+  const wa = screen.getDisplayNearestPoint({ x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2) }).workArea;
+  const width = Math.round(Math.min(wa.width, Math.max(CHAT_MIN_W, b.width)));
+  const height = Math.round(Math.min(wa.height, Math.max(CHAT_MIN_H, b.height)));
+  const p = clampToDesktop(Math.round(b.x), Math.round(b.y), width, height);
+  return { x: p.x, y: p.y, width, height };
+}
+
+function saveChatWindow(patch, now = false) {
+  clearTimeout(saveChatTimer);
+  const save = () => {
+    saveChatTimer = null;
+    const state = { ...patch };
+    if (chatWin && !chatWin.isDestroyed()) state.bounds = chatWin.getBounds();
+    settings.update({ chatWindow: state });
+  };
+  if (now) save();
+  else saveChatTimer = setTimeout(save, 600);
+}
+
 function createChatWindow() {
   if (chatWin) {
     chatWin.show();
@@ -345,11 +377,14 @@ function createChatWindow() {
     return;
   }
   const wa = screen.getPrimaryDisplay().workArea;
+  const saved = savedChatBounds();
   chatWin = new BrowserWindow({
-    width: 380,
-    height: 540,
-    x: Math.max(wa.x, wa.x + wa.width - 400),
-    y: Math.max(wa.y, wa.y + wa.height - 560),
+    width: saved ? saved.width : 380,
+    height: saved ? saved.height : 540,
+    x: saved ? saved.x : Math.max(wa.x, wa.x + wa.width - 400),
+    y: saved ? saved.y : Math.max(wa.y, wa.y + wa.height - 560),
+    minWidth: CHAT_MIN_W,
+    minHeight: CHAT_MIN_H,
     frame: false,
     resizable: true,
     minimizable: false,
@@ -371,7 +406,17 @@ function createChatWindow() {
   chatWin.webContents.once("did-finish-load", () => {
     if (chatWin && !chatWin.isDestroyed()) chatWin.webContents.send("pet:speaking", petSpeaking);
   });
-  chatWin.on("closed", () => (chatWin = null));
+  saveChatWindow({ open: true }, true);
+  chatWin.on("move", () => saveChatWindow({ open: true }));
+  chatWin.on("resize", () => saveChatWindow({ open: true }));
+  // Bounds are saved while it is still there; "closed" only records that it is shut.
+  chatWin.on("close", () => saveChatWindow({ open: true }, true));
+  chatWin.on("closed", () => {
+    chatWin = null;
+    clearTimeout(saveChatTimer);
+    // Closed with ✕ (or the tray): stays closed next launch. Closed by quitting: reopens.
+    if (!quitting) settings.update({ chatWindow: { open: false } });
+  });
 }
 
 function createSettingsWindow() {
@@ -458,7 +503,7 @@ function buildTray() {
   buildTrayMenu();
   tray.on("click", () => raiseVisibleWindows());
   if (process.platform === "win32") {
-    tray.on("right-click", () => tray.popUpContextMenu(makeTrayMenu()));
+    tray.on("right-click", () => popupMenu(makeTrayMenu(), (m) => tray.popUpContextMenu(m)));
   }
 }
 
@@ -518,6 +563,27 @@ function applyAlwaysOnTop() {
   for (const win of [petWin, chatWin]) {
     if (win && !win.isDestroyed()) win.setAlwaysOnTop(alwaysOnTop, "floating");
   }
+  rearmPetMouse();
+}
+
+/**
+ * Re-apply the pet window's click-through. On Windows the mouse forwarding that
+ * lets her notice the cursor can silently stop after the window is hidden and
+ * shown, after a native menu (tray or right-click), or after an always-on-top
+ * change; she then never re-captures the mouse, so clicks and right-clicks on
+ * her stop working. Re-arming resets main and the renderer to "click-through,
+ * waiting for the cursor"; the renderer re-captures on the next mousemove over her.
+ */
+function rearmPetMouse() {
+  if (!petWin || petWin.isDestroyed()) return;
+  petWin.setIgnoreMouseEvents(true, { forward: true });
+  petWin.webContents.send("pet:rearm-mouse");
+}
+
+/** Show a menu (tray or right-click); the pet's click-through is re-armed when it closes. */
+function popupMenu(menu, popup) {
+  menu.once("menu-will-close", () => setTimeout(rearmPetMouse, 50));
+  popup(menu);
 }
 
 /**
@@ -534,6 +600,7 @@ function raiseWindow(win, focus) {
   win.moveTop();
   if (focus) win.focus();
   win.setAlwaysOnTop(alwaysOnTop, "floating");
+  if (win === petWin) rearmPetMouse();
   return true;
 }
 
@@ -709,7 +776,7 @@ function registerWindowIpc() {
 
   // Right-click on the pet: the same menu as the tray icon.
   ipcMain.on("pet:context-menu", (e) => {
-    if (fromPet(e)) makeTrayMenu().popup({ window: petWin });
+    if (fromPet(e)) popupMenu(makeTrayMenu(), (m) => m.popup({ window: petWin }));
   });
 
   // The app's version (package.json), shown in Settings.
@@ -797,6 +864,8 @@ if (!gotLock) {
         // Back where she was last time (or the bottom-right corner on first run).
         createPetWindow(savedPetPosition() || undefined);
         console.log("[main] pet window created");
+        // The chat window comes back too if it was open when the app last quit.
+        if ((settings.get().chatWindow || {}).open) createChatWindow();
       } catch (err) {
         console.error("[main] pet window creation failed:", err);
       }
@@ -817,7 +886,9 @@ if (!gotLock) {
   // Electron doesn't wait for an async before-quit handler, so shut things down
   // synchronously; the local server's sockets close with the process.
   app.on("before-quit", () => {
+    quitting = true;
     if (savePosTimer) savePetPosition(true); // a drag that ended just before quitting
+    if (chatWin && !chatWin.isDestroyed()) saveChatWindow({ open: true }, true);
     if (cursorTimer) clearInterval(cursorTimer);
     if (proactive) proactive.stop();
     if (fullscreenWatcher) fullscreenWatcher.stop();

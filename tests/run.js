@@ -309,6 +309,19 @@ test("voice speed: global default 1x, per-model override, cleared override falls
   assert.strictEqual(voiceSpeed({ tts: { speed: 9 } }, "X"), 2);
 });
 
+test("settings: the chat window's open state, position and size survive a restart", () => {
+  const { SettingsStore } = require("../settings.js");
+  const dir = require("fs").mkdtempSync(path.join(require("os").tmpdir(), "wp-chatwin-"));
+  const a = new SettingsStore(dir);
+  assert.deepStrictEqual(a.get().chatWindow, { open: false, bounds: null }, "closed, default size, on first run");
+  a.update({ chatWindow: { open: true, bounds: { x: 2200, y: 140, width: 520, height: 760 } } });
+  const b = new SettingsStore(dir);
+  assert.deepStrictEqual(b.get().chatWindow, { open: true, bounds: { x: 2200, y: 140, width: 520, height: 760 } });
+  b.update({ chatWindow: { open: false } }); // closed with ✕: bounds are kept for next time
+  assert.deepStrictEqual(new SettingsStore(dir).get().chatWindow.bounds, { x: 2200, y: 140, width: 520, height: 760 });
+  assert.strictEqual(new SettingsStore(dir).get().chatWindow.open, false);
+});
+
 test("modelOverride: returns non-empty override", () => {
   const models = { ModelA: { systemPrompt: "You are a test persona.", voice: "af" } };
   assert.strictEqual(modelOverride(models, "ModelA", "systemPrompt"), "You are a test persona.");

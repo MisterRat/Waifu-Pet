@@ -135,6 +135,7 @@ const sse = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: te
     assert.strictEqual(p, "Persona." + CODE_INSTRUCTIONS);
     assert.match(CODE_INSTRUCTIONS, /\[waifucode\][\s\S]*\[\/waifucode\]/);
     assert.match(CODE_INSTRUCTIONS, /Never use Markdown code fences or backticks/);
+    assert.match(CODE_INSTRUCTIONS, /SQL[\s\S]*T-SQL[\s\S]*MySQL/, "SQL is named explicitly");
     assert.match(CODE_INSTRUCTIONS, /never read aloud/);
     const t = buildSystemPrompt(cfg, "Tamamo");
     assert.ok(t.indexOf("[happy]") > 0 && t.indexOf("[happy]") < t.indexOf("[waifucode]"), "tags first, then the code rule");

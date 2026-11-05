@@ -231,7 +231,9 @@ function tagInstructions(v) {
 // renderer/tagParser.js), so the LLM must wrap it in our own container tags.
 const CODE_INSTRUCTIONS =
   "\n\nWhen you give code, commands, file contents or anything else meant to be copied, put it " +
-  "between [waifucode] and [/waifucode], with nothing else inside, for example:\n" +
+  "between [waifucode] and [/waifucode], with nothing else inside. That includes every SQL query or " +
+  "script (Microsoft SQL Server T-SQL, MySQL and any other), even a one-line SELECT, as well as " +
+  "PowerShell and shell commands, config files and JSON. For example:\n" +
   "[waifucode]\nprint(\"hello\")\n[/waifucode]\n" +
   "Everything between those tags is shown on screen but never read aloud, so introduce the code in " +
   "a short spoken sentence and don't read it out, spell it out or describe it line by line. " +
