@@ -74,6 +74,8 @@ const RANGE_FORMAT = {
   frameX: (v) => v.toFixed(2),
   frameY: (v) => v.toFixed(2),
   tailWagGain: (v) => v.toFixed(1) + "×",
+  ttsSpeed: (v) => v.toFixed(2) + "×",
+  modelSpeed: (v) => v.toFixed(2) + "×",
 };
 function updateRangeLabels() {
   for (const id of Object.keys(RANGE_FORMAT)) {
@@ -82,6 +84,11 @@ function updateRangeLabels() {
   }
 }
 for (const id of Object.keys(RANGE_FORMAT)) $(id).addEventListener("input", updateRangeLabels);
+
+// Per-model speed: the slider only applies while "Own voice speed" is on.
+$("modelSpeedOn").addEventListener("change", () => {
+  $("modelSpeed").disabled = !$("modelSpeedOn").checked;
+});
 
 // Framing sliders the user has moved since the model's values were loaded. Only
 // these are saved, so a mouse-wheel zoom or right-drag done in the pet while
@@ -121,6 +128,8 @@ window.pet
       sel.appendChild(opt);
     }
     sel.value = models.some((m) => m.name === s.pet.model) ? s.pet.model : (models[0] && models[0].name);
+    // Global speed first: a model without its own speed starts its slider there.
+    $("ttsSpeed").value = Number.isFinite(s.tts.speed) ? s.tts.speed : 1;
     fillModelOverrides(s.models || {});
     sel.addEventListener("change", () => {
       reloadModelOverrides();
@@ -163,6 +172,11 @@ function fillModelOverrides(models) {
   const o = models[name] || {};
   $("modelSystemPrompt").value = o.systemPrompt || "";
   $("modelVoice").value = o.voice || "";
+  // Own speed: on when the model has one; the slider starts at the global speed otherwise.
+  const own = Number.isFinite(o.speed);
+  $("modelSpeedOn").checked = own;
+  $("modelSpeed").value = own ? o.speed : $("ttsSpeed").value;
+  $("modelSpeed").disabled = !own;
   const f = o.framing || {};
   $("frameZoom").value = Number.isFinite(f.zoom) ? f.zoom : 1;
   $("frameX").value = Number.isFinite(f.x) ? f.x : 0;
@@ -207,6 +221,8 @@ function collect() {
   const modelOverride = {
     systemPrompt: $("modelSystemPrompt").value.trim(),
     voice: $("modelVoice").value.trim(),
+    // null clears the override, so the model goes back to the global speed.
+    speed: $("modelSpeedOn").checked ? parseFloat($("modelSpeed").value) : null,
   };
   // Only the framing values moved here; the rest stay as the pet saved them.
   const framing = {};
@@ -243,6 +259,7 @@ function collect() {
       apiKey: $("ttsApiKey").value.trim(),
       model: $("ttsModel").value.trim(),
       voice: $("ttsVoice").value.trim(),
+      speed: parseFloat($("ttsSpeed").value),
     },
     pet: {
       model: $("petModel").value,

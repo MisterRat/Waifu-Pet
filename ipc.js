@@ -9,7 +9,7 @@ const { stripTags, cleanTranscript } = require("./speechText");
 const { ipcMain } = require("electron");
 const { extractContent, extractSseContent, createSseParser } = require("./extractContent");
 const { listModels, resolveModelName, inspectModel } = require("./models");
-const { modelOverride, publicView } = require("./settings");
+const { modelOverride, publicView, voiceSpeed } = require("./settings");
 
 function normalizeBaseUrl(baseUrl) {
   return String(baseUrl || "").trim().replace(/\/+$/, "");
@@ -369,7 +369,8 @@ function registerIpc(settings, hooks = {}) {
     const { tts } = settings.get();
     const input = stripTags(String((payload && payload.text) || "")).slice(0, 5000);
     if (!tts.enabled || !input) return { audioBase64: null, mimeType: null };
-    const res = await ttsRequest(tts, input, typeof tts.speed === "number" ? tts.speed : 1.0);
+    // Speed: this model's own, else the global one.
+    const res = await ttsRequest(tts, input, voiceSpeed(settings.get(), activeModel()));
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`TTS API returned status ${res.status}: ${body.slice(0, 200)}`);
@@ -398,7 +399,7 @@ function registerIpc(settings, hooks = {}) {
   ipcMain.handle("tts:test", async () => {
     const { tts } = settings.get();
     try {
-      const res = await ttsRequest(tts, "Hi!", 1.0);
+      const res = await ttsRequest(tts, "Hi!", voiceSpeed(settings.get(), activeModel()));
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         return { ok: false, error: `Status ${res.status}: ${body.slice(0, 200)}` };

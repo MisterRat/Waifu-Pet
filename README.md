@@ -100,10 +100,12 @@ Behaviour (each part has an off switch in Settings):
 
 ## Settings
 
-Open from the tray. The **Test** page has a button for every face, motion and
+Open from the tray. **Voice speed** (Voice page) sets how fast she talks, 1× by
+default; on the Pet page a model can have its own speed, which wins while
+*Own voice speed* is on. The **Test** page has a button for every face, motion and
 idle loop of the loaded model, to play them on the pet right away. Chat and TTS each take a base URL (for example
 `http://localhost:11434/v1`), an optional API key and a model name. Per model you
-can set a persona prompt, a TTS voice and the framing. The **Model check** panel
+can set a persona prompt, a TTS voice, a voice speed and the framing. The **Model check** panel
 lists what the selected model ships and what will work (blinking, lip sync, eye
 and head following, idle motions, oversized textures).
 

@@ -138,6 +138,7 @@
     input.switch:checked::after { transform: translateX(16px); }
     input.switch:focus-visible { box-shadow: 0 0 0 3px rgba(139,111,240,.35); }
 
+    input[type=range]:disabled { opacity: 0.4; }
     input[type=range] {
       appearance: none; -webkit-appearance: none; height: 4px; padding: 0;
       background: #433c68; border-radius: 2px; border: none; box-shadow: none;
@@ -278,6 +279,13 @@
           <label>Voice</label>
           <input id="ttsVoice" type="text" />
         </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Voice speed</div>
+            <div class="desc">How fast she talks. 1× is normal. A model can have its own speed (Pet page).</div>
+          </div>
+          <div class="ctl"><input id="ttsSpeed" type="range" min="0.5" max="2" step="0.05" /><span class="val" id="ttsSpeedVal"></span></div>
+        </div>
         <div class="actions">
           <button id="testTts" class="btn secondary small">Test TTS</button>
           <div id="ttsStatus" class="status"></div>
@@ -364,6 +372,19 @@
         <div class="field">
           <label>Voice for this model</label>
           <input id="modelVoice" type="text" placeholder="Blank = use the global voice. e.g. af_heart(.8)+zf_xiaoni(.2)" />
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Own voice speed</div>
+            <div class="desc">Off = use the global speed (Voice page).</div>
+          </div>
+          <div class="ctl"><input id="modelSpeedOn" class="switch" type="checkbox" /></div>
+        </div>
+        <div class="setting">
+          <div class="txt">
+            <div class="name">Voice speed for this model</div>
+          </div>
+          <div class="ctl"><input id="modelSpeed" type="range" min="0.5" max="2" step="0.05" /><span class="val" id="modelSpeedVal"></span></div>
         </div>
       </div>
 

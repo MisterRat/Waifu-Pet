@@ -35,7 +35,7 @@ const DEFAULTS = {
     apiKey: "",
     model: "kokoro",
     voice: "af_bella(.1)+zf_xiaoni(.9)",
-    speed: 1.0,
+    speed: 1.0, // voice speed, 0.5 .. 2 (1 = normal); a model can override it (models.<name>.speed)
   },
   // Voice input: built-in Whisper (downloaded on first use, loaded only while enabled)
   stt: {
@@ -82,6 +82,22 @@ function modelOverride(models, modelName, key) {
   const o = (models || {})[modelName];
   const v = o && o[key];
   return typeof v === "string" && v.trim() ? v : "";
+}
+
+/** Voice speeds the app accepts (TTS servers differ; this range is safe for Kokoro and OpenAI). */
+const MIN_SPEED = 0.5;
+const MAX_SPEED = 2;
+const clampSpeed = (v) => Math.min(MAX_SPEED, Math.max(MIN_SPEED, v));
+
+/**
+ * Voice speed for a model: its own override when set, else the global tts.speed,
+ * else 1. Always within MIN_SPEED..MAX_SPEED.
+ */
+function voiceSpeed(cfg, modelName) {
+  const own = ((cfg && cfg.models) || {})[modelName];
+  if (own && Number.isFinite(own.speed)) return clampSpeed(own.speed);
+  const g = cfg && cfg.tts && cfg.tts.speed;
+  return Number.isFinite(g) ? clampSpeed(g) : 1;
 }
 
 function deepMerge(base, extra) {
@@ -250,4 +266,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore, DEFAULTS, modelOverride, publicView };
+module.exports = { SettingsStore, DEFAULTS, modelOverride, publicView, voiceSpeed, MIN_SPEED, MAX_SPEED };
